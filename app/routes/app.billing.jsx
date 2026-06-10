@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import {
   Badge,
   Banner,
@@ -22,6 +23,7 @@ import {
   BILLING_PLAN_KEYS,
   BILLING_PLANS,
   PAID_PLAN_NAMES,
+  PAID_PLAN_KEYS,
   getPlanByName,
 } from "../services/billing.service";
 import { resolveTenant } from "../services/tenant.service.js";
@@ -34,7 +36,7 @@ export const loader = async ({ request }) => {
   const isBillingTest =
     globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false";
   const billingCheck = await billing.check({
-    plans: PAID_PLAN_NAMES,
+    plans: PAID_PLAN_KEYS,
     isTest: isBillingTest,
   });
   const activeSubscription = billingCheck.appSubscriptions.find(
@@ -88,7 +90,15 @@ function formatPrice(amount) {
   return `$${amount.toFixed(2)}`;
 }
 
-function PlanCard({ plan, isActive, isFeatured, subscribeUrl }) {
+function PlanCard({ plan, isActive, isFeatured, actionUrl }) {
+  const fetcher = useFetcher();
+
+  useEffect(() => {
+    if (fetcher.data?.confirmationUrl) {
+      window.open(fetcher.data.confirmationUrl, "_top");
+    }
+  }, [fetcher.data]);
+
   return (
     <div style={{ height: "100%" }}>
       <Card padding="0">
@@ -165,13 +175,17 @@ function PlanCard({ plan, isActive, isFeatured, subscribeUrl }) {
                     Current plan
                   </Button>
                 ) : (
-                  <Button
-                    fullWidth
-                    variant={isFeatured ? "primary" : "secondary"}
-                    url={subscribeUrl}
-                  >
-                    {plan.amount === 0 ? "Use Free plan" : `Upgrade to ${plan.name}`}
-                  </Button>
+                  <fetcher.Form method="post" action={actionUrl} style={{ width: "100%" }}>
+                    <input type="hidden" name="plan" value={plan.key} />
+                    <Button
+                      submit
+                      loading={fetcher.state !== "idle"}
+                      fullWidth
+                      variant={isFeatured ? "primary" : "secondary"}
+                    >
+                      {plan.amount === 0 ? "Use Free plan" : `Upgrade to ${plan.name}`}
+                    </Button>
+                  </fetcher.Form>
                 )}
               </Box>
             </BlockStack>
@@ -185,16 +199,13 @@ function PlanCard({ plan, isActive, isFeatured, subscribeUrl }) {
 export default function Billing() {
   const loaderData = useLoaderData();
 
-  const getSubscribeUrl = (planKey) => {
-    const params = new URLSearchParams({ plan: planKey, embedded: "1" });
-    const host =
-      loaderData.host ||
-      (typeof window !== "undefined"
-        ? window.btoa(`${loaderData.shopDomain}/admin`)
-        : null);
-
-    if (host) params.set("host", host);
-
+  const getActionUrl = () => {
+    const params = new URLSearchParams();
+  
+    if (loaderData.host) {
+      params.set("host", loaderData.host);
+    }
+  
     return `/app/billing/subscribe?${params.toString()}`;
   };
 
@@ -221,7 +232,7 @@ export default function Billing() {
                   plan={plan}
                   isActive={loaderData.activePlanKey === plan.key}
                   isFeatured={plan.key === BILLING_PLAN_KEYS.PRO}
-                  subscribeUrl={getSubscribeUrl(plan.key)}
+                  actionUrl={getActionUrl()}
                 />
               ))}
             </InlineGrid>

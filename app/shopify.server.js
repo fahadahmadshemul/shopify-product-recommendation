@@ -1,3 +1,4 @@
+// File: app/shopify.server.js
 import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
@@ -8,6 +9,18 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { saveShopToDb } from "./services/shop.server.js";
+import { DeliveryMethod } from "@shopify/shopify-api";
+import { buildShopifyBillingConfig, BILLING_PLANS } from "./services/billing.service";
+
+// Build the dynamically formatted plans dictionary required by Shopify Remix
+const billingConfig = buildShopifyBillingConfig({
+  BillingInterval: {
+    Every30Days: "EVERY_30_DAYS",
+  },
+  BillingReplacementBehavior: {
+    ApplyImmediately: "APPLY_IMMEDIATELY",
+  },
+});
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -28,8 +41,10 @@ const shopify = shopifyApp({
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
 
+  // Configure app billing profiles
+  billing: billingConfig,
 
-  //Save shop info to database after authentication
+  // Save shop info to database after authentication
   afterAuth: async ({ session }) => {
     await saveShopToDb({
       shop: session.shop,
@@ -38,7 +53,37 @@ const shopify = shopifyApp({
     });
 
     console.log("✅ Shop saved:", session.shop);
-  }
+  },
+
+  // Declarative Webhook Handlers
+  webhooks: {
+    APP_SUBSCRIPTIONS_UPDATE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: "/api/webhooks",
+      callback: async (topic, shop, body) => {
+        const payload = JSON.parse(body);
+        const subscription = payload.appSubscription;
+        console.log(`Webhook received [${topic}] for ${shop}`);
+
+        if (prisma.billingSubscription) {
+          // Sync changes cleanly out-of-band to prevent state drift
+          await prisma.billingSubscription.upsert({
+            where: { id: subscription.admin_graphql_api_id },
+            create: {
+              id: subscription.admin_graphql_api_id,
+              shopId: shop,
+              shopifySubscriptionId: subscription.admin_graphql_api_id,
+              planKey: subscription.name.toUpperCase(),
+              status: subscription.status,
+            },
+            update: {
+              status: subscription.status,
+            },
+          });
+        }
+      },
+    },
+  },
 });
 
 export default shopify;

@@ -65,6 +65,8 @@ export const PAID_PLAN_NAMES = Object.values(PAID_BILLING_PLANS).map(
   (plan) => plan.name,
 );
 
+export const PAID_PLAN_KEYS = Object.keys(PAID_BILLING_PLANS);
+
 export function getPlan(planKey) {
   const plan = BILLING_PLANS[planKey];
   if (!plan) throw new Error("Unknown billing plan.");
@@ -72,8 +74,14 @@ export function getPlan(planKey) {
 }
 
 export function getPlanByName(planName) {
+  const upperName = planName?.toUpperCase();
   return (
-    Object.values(BILLING_PLANS).find((plan) => plan.name === planName) ?? null
+    Object.values(BILLING_PLANS).find(
+      (plan) =>
+        plan.name === planName ||
+        plan.key === upperName ||
+        plan.name.toUpperCase() === upperName,
+    ) ?? null
   );
 }
 
@@ -87,7 +95,7 @@ export function buildShopifyBillingConfig({
 }) {
   return Object.fromEntries(
     Object.values(PAID_BILLING_PLANS).map((plan) => [
-      plan.name,
+      plan.key,
       {
         replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
         trialDays: plan.trialDays,
