@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+//create shop table
+model Shop {
+  id            Int                   @id @default(autoincrement())
+  shop          String                @unique
+  subscriptions BillingSubscription[]
+  accessToken   String
+  scope         String
+  isActive      Boolean               @default(true)
+  installedAt   DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+}
+
+// Phase 1 — Products cache table
+
+model Product {
+  id         String   @id
+  title      String
+  price      Float
+  imageUrl   String?
+  shopDomain String
+  createdAt  DateTime @default(now())
+}
+
+// Phase 2+3 — Visitor activity
+model VisitorActivity {
+  id         Int      @id @default(autoincrement())
+  visitorId  String // customer's unique ID
+  shopDomain String
+  productId  String
+  eventType  String // "view", "cart", "purchase"
+  duration   Int? // how many seconds
+  createdAt  DateTime @default(now())
+}
+
+// Phase 4 — Recommendations
+model Recommendation {
+  id         Int      @id @default(autoincrement())
+  visitorId  String
+  shopDomain String
+  productId  String // Recommended product
+  score      Float // Recommendation score
+  createdAt  DateTime @default(now())
+}
+
+model BillingSubscription {
+  id                    String    @id @default(cuid())
+  shopId                Int
+  shopifySubscriptionId String?
+  planKey               String
+  status                String
+  trialEndsAt           DateTime?
+  currentPeriodEndsAt   DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
+}

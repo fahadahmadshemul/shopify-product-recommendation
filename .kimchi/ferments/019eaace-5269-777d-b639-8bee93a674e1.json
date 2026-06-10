@@ -1,0 +1,15 @@
+{
+  "id": "019eaace-5269-777d-b639-8bee93a674e1",
+  "name": "Fix Shopify billing auth",
+  "description": "Fix the Shopify billing system authentication issue. When clicking the \"choose\" button in billing, it redirects to login. After entering a Shop domain and clicking login, the error \"accounts.shopify.com refused to connect.\" appears. Need to explore the codebase, identify the root cause (likely Shopify OAuth/App Bridge/redirect configuration), and fix the issue so billing flow works correctly.",
+  "status": "draft",
+  "worktree": {
+    "path": "/mnt/c/laragon/www/product-recommendation"
+  },
+  "scoping": {},
+  "phases": [],
+  "decisions": [],
+  "memories": [],
+  "createdAt": "2026-06-09T05:15:08.777Z",
+  "updatedAt": "2026-06-09T05:15:08.777Z"
+}

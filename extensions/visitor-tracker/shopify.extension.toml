@@ -1,0 +1,9 @@
+name = "visitor-tracker"
+type = "theme_app_extension"
+uid = "83434a03-0c13-283f-cefa-e903f58fc5c88c3a7dd9"
+
+[settings]
+
+[[blocks]]
+name = "Visitor Tracker"
+type = "visitor_tracker"
