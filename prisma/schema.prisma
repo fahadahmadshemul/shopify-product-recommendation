@@ -50,6 +50,7 @@ model Shop {
 model Product {
   id         String   @id
   title      String
+  handle     String?
   price      Float
   imageUrl   String?
   shopDomain String

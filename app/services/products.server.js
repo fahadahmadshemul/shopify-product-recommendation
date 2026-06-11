@@ -11,6 +11,7 @@ export async function syncProducts(request) {
           node {
             id
             title
+            handle
             priceRangeV2 {
               minVariantPrice {
                 amount
@@ -33,6 +34,7 @@ export async function syncProducts(request) {
       where: { id: product.id },
       update: {
         title: product.title,
+        handle: product.handle,
         price: parseFloat(product.priceRangeV2.minVariantPrice.amount),
         imageUrl: product.featuredImage ? product.featuredImage.url : null,
         shopDomain: session.shop,
@@ -40,6 +42,7 @@ export async function syncProducts(request) {
       create: {
         id: product.id,
         title: product.title,
+        handle: product.handle,
         price: parseFloat(product.priceRangeV2.minVariantPrice.amount),
         imageUrl: product.featuredImage ? product.featuredImage.url : null,
         shopDomain: session.shop,
@@ -63,6 +66,7 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
           node {
             id
             title
+            handle
             priceRangeV2 {
               minVariantPrice {
                 amount
@@ -102,6 +106,7 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
       where: { id: product.id },
       update: {
         title: product.title,
+        handle: product.handle,
         price,
         imageUrl,
         shopDomain: session.shop,
@@ -109,6 +114,7 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
       create: {
         id: product.id,
         title: product.title,
+        handle: product.handle,
         price,
         imageUrl,
         shopDomain: session.shop,

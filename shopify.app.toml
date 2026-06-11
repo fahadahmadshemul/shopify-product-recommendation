@@ -47,6 +47,11 @@ api_version = "2026-07"
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
 
+[app_proxy]
+url = "https://example.com"
+subpath = "recommendation-tracker"
+prefix = "apps"
+
 [build]
 include_config_on_deploy = true
 automatically_update_urls_on_dev = true

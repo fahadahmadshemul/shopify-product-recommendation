@@ -126,6 +126,7 @@ export const action = async ({ request }) => {
         where: { id: product.id },
         update: {
           title: product.title,
+          handle: product.handle || null,
           price,
           imageUrl: product.images?.[0]?.originalSrc || null,
           shopDomain: session.shop,
@@ -133,6 +134,7 @@ export const action = async ({ request }) => {
         create: {
           id: product.id,
           title: product.title,
+          handle: product.handle || null,
           price,
           imageUrl: product.images?.[0]?.originalSrc || null,
           shopDomain: session.shop,
