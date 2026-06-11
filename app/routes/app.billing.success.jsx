@@ -1,5 +1,6 @@
 import { Page, Card, Text, Button, BlockStack } from "@shopify/polaris";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { resolveTenant } from "../services/tenant.service.js";
@@ -68,6 +69,14 @@ export const loader = async ({ request }) => {
     activePlanName: activePlan.name,
     host: url.searchParams.get("host"),
   };
+};
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
 };
 
 export default function BillingSuccess() {

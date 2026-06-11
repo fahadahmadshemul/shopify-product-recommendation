@@ -6,6 +6,8 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
+import { useState } from "react";
+import { Box, Banner } from "@shopify/polaris";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -18,16 +20,33 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey } = useLoaderData();
+  const isPlanPurchased =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("charge_id");
+  const [showBanner, setShowBanner] = useState(isPlanPurchased);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Home</s-link>
-        <s-link href="/app/additional">Additional page</s-link>
         <s-link href="/app/products">Products</s-link>
         <s-link href="/app/billing">Billing</s-link>
       </s-app-nav>
       <PolarisAppProvider i18n={enTranslations}>
+        {showBanner && (
+          <Box paddingBlockEnd="400" paddingInline="400">
+            <Banner
+              title="🎉 Subscription Activated"
+              tone="success"
+              onDismiss={() => setShowBanner(false)}
+            >
+              <p>
+                Thank you for subscribing! Your payment was successful and your
+                premium features are now unlocked.
+              </p>
+            </Banner>
+          </Box>
+        )}
         <Outlet />
       </PolarisAppProvider>
     </AppProvider>

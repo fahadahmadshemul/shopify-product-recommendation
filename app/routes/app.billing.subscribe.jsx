@@ -55,13 +55,9 @@ export const action = async ({ request }) => {
 
   // Handle Paid plan upgrade
   const returnUrl = new URL(
-    `${process.env.SHOPIFY_APP_URL}/app/billing/success`,
+    `/admin/apps/${process.env.SHOPIFY_API_KEY}/app`,
+    `https://${session.shop}`,
   );
-  returnUrl.searchParams.set("shop", session.shop);
-  if (host) {
-    returnUrl.searchParams.set("host", host);
-    returnUrl.searchParams.set("embedded", "1");
-  }
 
   try {
     await billing.request({

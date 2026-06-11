@@ -8,6 +8,10 @@ export const loader = async ({ request }) => {
   return null;
 };
 
+export default function Auth() {
+  return null;
+}
+
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
