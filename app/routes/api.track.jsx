@@ -61,8 +61,20 @@ export const action = async ({ request }) => {
                   amount
                 }
               }
+              compareAtPriceRange {
+                minVariantCompareAtPrice {
+                  amount
+                }
+              }
               featuredImage {
                 url
+              }
+              variants(first: 1) {
+                edges {
+                  node {
+                    id
+                  }
+                }
               }
             }
           }
@@ -73,7 +85,12 @@ export const action = async ({ request }) => {
 
         if (productData) {
           const price = parseFloat(productData.priceRangeV2.minVariantPrice.amount);
+          const compareAtPrice = productData.compareAtPriceRange
+            ? parseFloat(productData.compareAtPriceRange.minVariantCompareAtPrice.amount) || null
+            : null;
           const imageUrl = productData.featuredImage ? productData.featuredImage.url : null;
+          const variants = productData.variants?.edges || [];
+          const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
 
           await db.product.create({
             data: {
@@ -81,7 +98,9 @@ export const action = async ({ request }) => {
               title: productData.title,
               handle: productData.handle,
               price,
+              compareAtPrice,
               imageUrl,
+              firstVariantId,
               shopDomain,
             },
           });

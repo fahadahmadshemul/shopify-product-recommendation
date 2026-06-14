@@ -48,13 +48,15 @@ model Shop {
 // Phase 1 — Products cache table
 
 model Product {
-  id         String   @id
-  title      String
-  handle     String?
-  price      Float
-  imageUrl   String?
-  shopDomain String
-  createdAt  DateTime @default(now())
+  id              String   @id
+  title           String
+  handle          String?
+  price           Float
+  compareAtPrice  Float?
+  imageUrl        String?
+  firstVariantId  String?
+  shopDomain      String
+  createdAt       DateTime @default(now())
 }
 
 // Phase 2+3 — Visitor activity

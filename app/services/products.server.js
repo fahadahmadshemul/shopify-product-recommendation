@@ -17,8 +17,20 @@ export async function syncProducts(request) {
                 amount
               }
             }
+            compareAtPriceRange {
+              minVariantCompareAtPrice {
+                amount
+              }
+            }
             featuredImage {
               url
+            }
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
             }
           }
         }
@@ -30,13 +42,21 @@ export async function syncProducts(request) {
   const products = data.data.products.edges.map((edge) => edge.node);
 
   for (const product of products) {
+    const variants = product.variants?.edges || [];
+    const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
+    const compareAtPrice = product.compareAtPriceRange
+      ? parseFloat(product.compareAtPriceRange.minVariantCompareAtPrice.amount) || null
+      : null;
+
     await db.product.upsert({
       where: { id: product.id },
       update: {
         title: product.title,
         handle: product.handle,
         price: parseFloat(product.priceRangeV2.minVariantPrice.amount),
+        compareAtPrice,
         imageUrl: product.featuredImage ? product.featuredImage.url : null,
+        firstVariantId,
         shopDomain: session.shop,
       },
       create: {
@@ -44,7 +64,9 @@ export async function syncProducts(request) {
         title: product.title,
         handle: product.handle,
         price: parseFloat(product.priceRangeV2.minVariantPrice.amount),
+        compareAtPrice,
         imageUrl: product.featuredImage ? product.featuredImage.url : null,
+        firstVariantId,
         shopDomain: session.shop,
       }
     })
@@ -72,8 +94,20 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
                 amount
               }
             }
+            compareAtPriceRange {
+              minVariantCompareAtPrice {
+                amount
+              }
+            }
             featuredImage {
               url
+            }
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
             }
           }
         }
@@ -94,13 +128,18 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
 
     if (!exists) {
       if (limit !== null && savedCount >= limit) {
-        continue; // skip if limit exceeded
+        continue;
       }
       savedCount++;
     }
 
     const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
+    const compareAtPrice = product.compareAtPriceRange
+      ? parseFloat(product.compareAtPriceRange.minVariantCompareAtPrice.amount) || null
+      : null;
     const imageUrl = product.featuredImage ? product.featuredImage.url : null;
+    const variants = product.variants?.edges || [];
+    const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
 
     const saved = await db.product.upsert({
       where: { id: product.id },
@@ -108,7 +147,9 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
         title: product.title,
         handle: product.handle,
         price,
+        compareAtPrice,
         imageUrl,
+        firstVariantId,
         shopDomain: session.shop,
       },
       create: {
@@ -116,7 +157,9 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
         title: product.title,
         handle: product.handle,
         price,
+        compareAtPrice,
         imageUrl,
+        firstVariantId,
         shopDomain: session.shop,
       },
     });
