@@ -1,19 +1,83 @@
 (function () {
+  const APP_URL = "/apps/recommendation-tracker";
+
+  var shopDomain = window.Shopify?.shop || location.hostname;
+
+  // --- GDPR Consent Management ---
+  function getConsent() {
+    return localStorage.getItem("vt_consent_withdrawn") !== "1";
+  }
+
+  function setConsent(granted) {
+    if (granted) {
+      localStorage.removeItem("vt_consent_withdrawn");
+    } else {
+      localStorage.setItem("vt_consent_withdrawn", "1");
+      // Purge server-side data on opt-out
+      var oldId = getVisitorId(false);
+      if (oldId) {
+        fetch(APP_URL + "/api/gdpr?visitorId=" + encodeURIComponent(oldId) + "&shop=" + encodeURIComponent(shopDomain), {
+          method: "DELETE",
+        }).catch(function () {});
+      }
+      localStorage.removeItem("vt_visitor_id");
+    }
+  }
+
   // 1. Generate or retrieve visitor unique ID
-  function getVisitorId() {
-    let id = localStorage.getItem("vt_visitor_id");
-    if (!id) {
+  function getVisitorId(create) {
+    if (create === undefined) create = true;
+    var id = localStorage.getItem("vt_visitor_id");
+    if (!id && create) {
       id = "v_" + Math.random().toString(36).substr(2, 9) + Date.now();
       localStorage.setItem("vt_visitor_id", id);
     }
     return id;
   }
 
-  const visitorId = getVisitorId();
-  const shopDomain = window.Shopify?.shop || location.hostname;
-  
-  // Use relative App Proxy URL so that tunnel URL changes on npm run dev don't break tracking
-  const APP_URL = "/apps/recommendation-tracker";
+  if (!getConsent()) {
+    return; // User has opted out — don't track anything
+  }
+
+  // Show privacy notice banner on first visit (opt-out model)
+  (function () {
+    if (localStorage.getItem("vt_consent_banner_dismissed") === "1") return;
+    if (document.getElementById("vt-consent-banner")) return;
+
+    var banner = document.createElement("div");
+    banner.id = "vt-consent-banner";
+    banner.style.cssText =
+      "position:fixed;bottom:0;left:0;right:0;background:#1a1a1a;color:#fff;" +
+      "padding:16px 20px;z-index:2147483647;display:flex;align-items:center;" +
+      "justify-content:space-between;flex-wrap:wrap;gap:12px;font-family:" +
+      "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;";
+    banner.innerHTML =
+      '<span style="flex:1;min-width:200px;">' +
+      'This site uses analytics to personalize product recommendations. ' +
+      'See our <a href="/policies/privacy-policy" style="color:#34d399;">privacy policy</a>. ' +
+      'You can opt out at any time.' +
+      "</span>" +
+      '<div style="display:flex;gap:8px;flex-shrink:0;">' +
+      '<button id="vt-consent-optout" style="background:transparent;color:#999;border:1px solid #555;' +
+      'padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;">Opt Out</button>' +
+      '<button id="vt-consent-dismiss" style="background:#008060;color:#fff;border:none;' +
+      'padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;">OK</button>' +
+      "</div>";
+    document.body.appendChild(banner);
+
+    document.getElementById("vt-consent-dismiss").addEventListener("click", function () {
+      localStorage.setItem("vt_consent_banner_dismissed", "1");
+      banner.remove();
+    });
+
+    document.getElementById("vt-consent-optout").addEventListener("click", function () {
+      setConsent(false);
+      localStorage.setItem("vt_consent_banner_dismissed", "1");
+      banner.remove();
+    });
+  })();
+
+  var visitorId = getVisitorId();
 
   // 2. Event tracking helper
   function track(eventType, productId, duration = null) {
@@ -67,14 +131,25 @@
   fetch(`${APP_URL}/api/recommendations?productId=${encodeURIComponent(pid)}&visitorId=${encodeURIComponent(visitorId)}`)
     .then((res) => res.json())
     .then((data) => {
-      if (data && data.recommendations && data.recommendations.length > 0) {
-        renderRecommendations(data.recommendations);
+      if (data) {
+        renderRecommendations(data);
       }
     })
     .catch((err) => console.error("Error loading recommendations:", err));
 
   // 7. Render widget function
-  function renderRecommendations(recommendations) {
+  function renderRecommendations(data) {
+    const recommendations = data.recommendations || [];
+    const shopCurrency = data.shopCurrency || "USD";
+    const coldStart = data.coldStart || false;
+
+    var formatter = typeof Intl !== "undefined" && Intl.NumberFormat
+      ? new Intl.NumberFormat(undefined, { style: "currency", currency: shopCurrency })
+      : null;
+    function formatPrice(amount) {
+      if (formatter) return formatter.format(amount);
+      return shopCurrency + " " + Number(amount).toFixed(2);
+    }
     // Avoid duplicate insertions
     if (document.getElementById("shopify-recommendations-widget")) return;
 
@@ -275,25 +350,35 @@
         .shopify-recs-card:hover .shopify-recs-product-title {
           color: #34d399;
         }
+        .shopify-recs-empty-message {
+          color: #8e8e93;
+        }
+      }
+      .shopify-recs-empty-message {
+        text-align: center;
+        padding: 32px 16px;
+        color: #666;
+        font-size: 15px;
+        line-height: 1.5;
       }
     `;
     document.head.appendChild(style);
 
     // Build Cards HTML
-    const cardsHtml = recommendations
-      .map((rec) => {
-        const imageSrc = rec.imageUrl || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F4F4F4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%23999999'>No Image</text></svg>`;
-        const handleSlug = rec.handle || rec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        const productUrl = `/products/${handleSlug}`;
-        const hasSale = rec.compareAtPrice && rec.compareAtPrice > rec.price;
-        const variantId = rec.firstVariantId || "";
-        const saleBadge = hasSale
-          ? `<span class="shopify-recs-sale-badge">SALE</span>`
-          : "";
-        const comparePriceHtml = hasSale
-          ? `<span class="shopify-recs-compare-price">$${Number(rec.compareAtPrice).toFixed(2)}</span>`
-          : "";
-        return `
+    const cardsHtml = recommendations.length > 0
+      ? recommendations
+          .map((rec) => {
+            const imageSrc = rec.imageUrl || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F4F4F4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%23999999'>No Image</text></svg>`;
+            const productUrl = rec.handle ? `/products/${rec.handle}` : "#";
+            const hasSale = rec.compareAtPrice && rec.compareAtPrice > rec.price;
+            const variantId = rec.firstVariantId || "";
+            const saleBadge = hasSale
+              ? `<span class="shopify-recs-sale-badge">SALE</span>`
+              : "";
+            const comparePriceHtml = hasSale
+              ? '<span class="shopify-recs-compare-price">' + formatPrice(Number(rec.compareAtPrice)) + '</span>'
+              : "";
+            return `
           <div class="shopify-recs-card" data-rec-id="${rec.id}" data-variant-id="${escapeHtml(variantId)}">
             <a href="${productUrl}" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;flex:1;">
               <div class="shopify-recs-image-wrapper">
@@ -303,7 +388,7 @@
               <div class="shopify-recs-info">
                 <h4 class="shopify-recs-product-title">${escapeHtml(rec.title)}</h4>
                 <div class="shopify-recs-price-row">
-                  <span class="shopify-recs-price">$${Number(rec.price).toFixed(2)}</span>
+                  <span class="shopify-recs-price">${formatPrice(Number(rec.price))}</span>
                   ${comparePriceHtml}
                 </div>
               </div>
@@ -316,18 +401,28 @@
             </div>
           </div>
         `;
-      })
-      .join("");
+          })
+          .join("")
+      : "";
+
+    const headerTitle = coldStart
+      ? "Popular Products"
+      : recommendations.length > 0
+        ? "Recommended for You"
+        : "Coming Soon";
+
+    const emptyMessage = recommendations.length === 0
+      ? `<p class="shopify-recs-empty-message">We're learning what you love! Personalized recommendations will appear as you browse more products.</p>`
+      : "";
 
     // Build Widget Container HTML
     const widgetHtml = `
       <div class="shopify-recs-wrapper">
         <div class="shopify-recs-section-header">
-          <h3 class="shopify-recs-title">Recommended for You</h3>
+          <h3 class="shopify-recs-title">${headerTitle}</h3>
         </div>
-        <div class="shopify-recs-grid">
-          ${cardsHtml}
-        </div>
+        ${emptyMessage}
+        ${cardsHtml ? `<div class="shopify-recs-grid">${cardsHtml}</div>` : ""}
       </div>
     `;
 

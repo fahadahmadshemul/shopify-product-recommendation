@@ -41,6 +41,7 @@ model Shop {
   accessToken   String
   scope         String
   isActive      Boolean               @default(true)
+  currency      String                @default("USD")
   installedAt   DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 }
@@ -57,6 +58,8 @@ model Product {
   firstVariantId  String?
   shopDomain      String
   createdAt       DateTime @default(now())
+
+  @@index([shopDomain])
 }
 
 // Phase 2+3 — Visitor activity
@@ -68,6 +71,9 @@ model VisitorActivity {
   eventType  String // "view", "cart", "purchase"
   duration   Int? // how many seconds
   createdAt  DateTime @default(now())
+
+  @@index([shopDomain, productId])
+  @@index([shopDomain, visitorId])
 }
 
 // Phase 4 — Recommendations
@@ -78,6 +84,8 @@ model Recommendation {
   productId  String // Recommended product
   score      Float // Recommendation score
   createdAt  DateTime @default(now())
+
+  @@index([shopDomain, createdAt])
 }
 
 model BillingSubscription {

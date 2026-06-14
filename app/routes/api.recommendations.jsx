@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
+import { checkRateLimit } from "../services/rate-limiter.server";
 
 // CORS headers for preflight request routing
 const corsHeaders = {
@@ -29,6 +30,13 @@ export const loader = async ({ request }) => {
     const productId = url.searchParams.get("productId");
     const visitorId = url.searchParams.get("visitorId");
 
+    // Fetch shop currency for client-side formatting
+    const shopRecord = await db.shop.findUnique({
+      where: { shop: shopDomain },
+      select: { currency: true },
+    });
+    const shopCurrency = shopRecord?.currency || "USD";
+
     // Check monthly recommendation limit based on billing plan
     const limitCheck = await checkRecommendationLimit(shopDomain);
     if (!limitCheck.allowed) {
@@ -42,6 +50,8 @@ export const loader = async ({ request }) => {
       );
     }
 
+    let coldStart = false;
+
     // Cap max recommendations to remaining monthly allowance
     const maxRecs = Math.min(4, limitCheck.remaining === Infinity ? 4 : limitCheck.remaining);
 
@@ -49,6 +59,15 @@ export const loader = async ({ request }) => {
       return Response.json(
         { error: "Missing productId or visitorId" },
         { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Rate limit per visitor + IP (30 req/min)
+    const rateCheck = checkRateLimit(request, visitorId, { maxRequests: 30, windowMs: 60_000 });
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests", retryAfter: rateCheck.retryAfter }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rateCheck.retryAfter) } }
       );
     }
 
@@ -69,6 +88,7 @@ export const loader = async ({ request }) => {
       },
       select: { visitorId: true },
       distinct: ["visitorId"],
+      take: 200,
     });
 
     const visitorIds = otherVisitors.map((v) => v.visitorId);
@@ -88,6 +108,7 @@ export const loader = async ({ request }) => {
           createdAt: true,
         },
         orderBy: { createdAt: "desc" },
+        take: 2000,
       });
 
       // Apply recency decay + event weight to score each product
@@ -125,6 +146,7 @@ export const loader = async ({ request }) => {
           createdAt: true,
         },
         orderBy: { createdAt: "desc" },
+        take: 1000,
       });
 
       const fallbackMap = new Map();
@@ -147,6 +169,18 @@ export const loader = async ({ request }) => {
       recommendedProductIds = [...recommendedProductIds, ...fallbackRecs];
     }
 
+    // 3b. Cold-start: no activity anywhere in the store — fall back to recent products
+    if (recommendedProductIds.length === 0) {
+      coldStart = true;
+      const recentProducts = await db.product.findMany({
+        where: { shopDomain },
+        orderBy: { createdAt: "desc" },
+        take: maxRecs,
+        select: { id: true },
+      });
+      recommendedProductIds = recentProducts.map((p) => ({ id: p.id, score: 0 }));
+    }
+
     // 4. Fetch details for recommended products from cache table
     const productIdsToFetch = recommendedProductIds.map((r) => r.id);
     const dbProducts = await db.product.findMany({
@@ -156,32 +190,41 @@ export const loader = async ({ request }) => {
       },
     });
 
-    // Check if any product has a null handle and fetch it on-the-fly from Shopify
-    for (let i = 0; i < dbProducts.length; i++) {
-      const product = dbProducts[i];
-      if (!product.handle && admin) {
-        try {
-          const gqlResponse = await admin.graphql(`
-            query {
-              product(id: "${product.id}") {
+    // Batch-fetch missing handles from Shopify in one query
+    const productsMissingHandles = dbProducts
+      .map((p, i) => ({ product: p, index: i }))
+      .filter(({ product }) => !product.handle);
+
+    if (productsMissingHandles.length > 0 && admin) {
+      try {
+        const ids = productsMissingHandles.map(({ product }) => product.id);
+        const gqlResponse = await admin.graphql(`
+          query {
+            nodes(ids: [${ids.map((id) => `"${id}"`).join(", ")}]) {
+              ... on Product {
+                id
                 handle
               }
             }
-          `);
-          const gqlData = await gqlResponse.json();
-          const handle = gqlData.data?.product?.handle;
+          }
+        `);
+        const gqlData = await gqlResponse.json();
+        const nodes = gqlData.data?.nodes || [];
+        const handleMap = new Map(nodes.filter(Boolean).map((n) => [n.id, n.handle]));
+
+        for (const { product, index } of productsMissingHandles) {
+          const handle = handleMap.get(product.id);
           if (handle) {
-            // Update database cache
             const updated = await db.product.update({
               where: { id: product.id },
               data: { handle },
             });
-            dbProducts[i] = updated;
+            dbProducts[index] = updated;
             console.log(`On-the-fly updated missing handle for ${product.id}: ${handle}`);
           }
-        } catch (err) {
-          console.error(`Failed to fetch missing handle for ${product.id}:`, err);
         }
+      } catch (err) {
+        console.error(`Failed to batch-fetch missing handles:`, err);
       }
     }
 
@@ -217,6 +260,8 @@ export const loader = async ({ request }) => {
     return Response.json(
       {
         recommendations: finalRecommendations,
+        shopCurrency,
+        coldStart,
         limitUsage: {
           used: limitCheck.used + finalRecommendations.length,
           limit: limitCheck.limit,
@@ -228,7 +273,7 @@ export const loader = async ({ request }) => {
   } catch (error) {
     console.error("Recommendations API error:", error);
     return Response.json(
-      { error: "Server error" },
+      { error: error.message || "Server error" },
       { status: 500, headers: corsHeaders }
     );
   }

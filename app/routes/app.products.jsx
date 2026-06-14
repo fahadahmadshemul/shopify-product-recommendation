@@ -282,7 +282,7 @@ export default function ProductsPage() {
       </IndexTable.Cell>
       <IndexTable.Cell>
         <Text as="span" numeric>
-          ${Number(product.price).toFixed(2)}
+          {Number(product.price).toFixed(2)}
         </Text>
       </IndexTable.Cell>
       <IndexTable.Cell>
