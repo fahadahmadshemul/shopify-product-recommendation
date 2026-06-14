@@ -193,7 +193,8 @@
     const cardsHtml = recommendations
       .map((rec) => {
         const imageSrc = rec.imageUrl || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F4F4F4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%23999999'>No Image</text></svg>`;
-        const productUrl = `/products/${rec.handle || ""}`;
+        const handleSlug = rec.handle || rec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+        const productUrl = `/products/${handleSlug}`;
         return `
           <a href="${productUrl}" class="shopify-recs-card" data-rec-id="${rec.id}">
             <div class="shopify-recs-image-wrapper">

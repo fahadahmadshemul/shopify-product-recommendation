@@ -15,7 +15,7 @@ export const loader = async ({ request }) => {
 
   try {
     // Authenticate the request via Shopify App Proxy signatures
-    const { session } = await authenticate.public.appProxy(request);
+    const { session, admin } = await authenticate.public.appProxy(request);
     const shopDomain = session ? session.shop : new URL(request.url).searchParams.get("shop");
     if (!shopDomain) {
       return Response.json(
@@ -116,6 +116,35 @@ export const loader = async ({ request }) => {
         shopDomain,
       },
     });
+
+    // Check if any product has a null handle and fetch it on-the-fly from Shopify
+    for (let i = 0; i < dbProducts.length; i++) {
+      const product = dbProducts[i];
+      if (!product.handle && admin) {
+        try {
+          const gqlResponse = await admin.graphql(`
+            query {
+              product(id: "${product.id}") {
+                handle
+              }
+            }
+          `);
+          const gqlData = await gqlResponse.json();
+          const handle = gqlData.data?.product?.handle;
+          if (handle) {
+            // Update database cache
+            const updated = await db.product.update({
+              where: { id: product.id },
+              data: { handle },
+            });
+            dbProducts[i] = updated;
+            console.log(`On-the-fly updated missing handle for ${product.id}: ${handle}`);
+          }
+        } catch (err) {
+          console.error(`Failed to fetch missing handle for ${product.id}:`, err);
+        }
+      }
+    }
 
     // Match details and scores, maintaining the recommended order
     const productMap = new Map(dbProducts.map((p) => [p.id, p]));
