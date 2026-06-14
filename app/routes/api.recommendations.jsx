@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 
 // CORS headers for preflight request routing
 const corsHeaders = {
@@ -27,6 +28,19 @@ export const loader = async ({ request }) => {
     const url = new URL(request.url);
     const productId = url.searchParams.get("productId");
     const visitorId = url.searchParams.get("visitorId");
+
+    // Check monthly recommendation limit based on billing plan
+    const limitCheck = await checkRecommendationLimit(shopDomain);
+    if (!limitCheck.allowed) {
+      return Response.json(
+        {
+          recommendations: [],
+          limitReached: true,
+          message: `Monthly recommendation limit (${limitCheck.limit}) reached on your ${limitCheck.planName} plan. Upgrade to unlock unlimited recommendations.`,
+        },
+        { headers: corsHeaders }
+      );
+    }
 
     if (!productId || !visitorId) {
       return Response.json(
@@ -176,7 +190,14 @@ export const loader = async ({ request }) => {
     }
 
     return Response.json(
-      { recommendations: finalRecommendations },
+      {
+        recommendations: finalRecommendations,
+        limitUsage: {
+          used: limitCheck.used + finalRecommendations.length,
+          limit: limitCheck.limit,
+          planName: limitCheck.planName,
+        },
+      },
       { headers: corsHeaders }
     );
   } catch (error) {

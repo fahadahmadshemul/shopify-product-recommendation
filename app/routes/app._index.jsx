@@ -2,7 +2,8 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { Card, Text, BlockStack, Box, InlineGrid, Layout, InlineStack, Badge, Thumbnail, Divider, ProgressBar } from "@shopify/polaris";
+import { Card, Text, BlockStack, Box, InlineGrid, Layout, InlineStack, Badge, Thumbnail, Divider, ProgressBar, Banner, Link } from "@shopify/polaris";
+import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -239,6 +240,9 @@ export const loader = async ({ request }) => {
 
   const chartData = Object.values(dailyDataMap);
 
+  // Plan & recommendation limit info
+  const recLimitInfo = await checkRecommendationLimit(session.shop);
+
   return {
     totalViews,
     totalAddToCart,
@@ -250,6 +254,7 @@ export const loader = async ({ request }) => {
     recConversionRate,
     topProducts,
     chartData,
+    recLimitInfo,
   };
 };
 
@@ -265,6 +270,7 @@ export default function Index() {
     recConversionRate,
     topProducts,
     chartData,
+    recLimitInfo,
   } = useLoaderData();
 
   // Helper functions for SVG chart plotting
@@ -314,6 +320,26 @@ export default function Index() {
   return (
     <s-page heading="Product Recommendation">
       <BlockStack gap="600">
+        {/* Recommendation limit warning */}
+        {recLimitInfo.limit !== null && recLimitInfo.remaining === 0 && (
+          <Banner title={`Monthly recommendation limit reached`} tone="critical">
+            <p>
+              Your {recLimitInfo.planName} plan allows {recLimitInfo.limit} recommendations per month and you&apos;ve used all of them.
+              Storefront recommendations are now paused.{" "}
+              <Link url="/app/billing" removeUnderline>Upgrade to Pro for unlimited recommendations</Link>.
+            </p>
+          </Banner>
+        )}
+        {recLimitInfo.limit !== null && recLimitInfo.remaining > 0 && recLimitInfo.remaining <= 3 && (
+          <Banner title={`Running low on recommendations`} tone="warning">
+            <p>
+              Only {recLimitInfo.remaining} recommendations remaining this month on your {recLimitInfo.planName} plan
+              ({recLimitInfo.used}/{recLimitInfo.limit} used).{" "}
+              <Link url="/app/billing" removeUnderline>Upgrade plan to get more</Link>.
+            </p>
+          </Banner>
+        )}
+
         {/* Core Store Metrics Grid */}
         <BlockStack gap="300">
           <Text as="h2" variant="headingMd" fontWeight="bold">
@@ -507,6 +533,37 @@ export default function Index() {
           {/* Sidebar Column */}
           <Layout.Section variant="oneThird">
             <BlockStack gap="400">
+              {/* Recommendation Usage */}
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingMd" fontWeight="bold">
+                    Monthly Recommendation Usage
+                  </Text>
+                  <BlockStack gap="100">
+                    <InlineStack align="space-between">
+                      <Text fontWeight="bold">{recLimitInfo.planName} Plan</Text>
+                      <Text tone={recLimitInfo.limit === null ? "success" : recLimitInfo.used >= recLimitInfo.limit ? "critical" : "subdued"}>
+                        {recLimitInfo.limit === null
+                          ? "Unlimited"
+                          : `${recLimitInfo.used} / ${recLimitInfo.limit} this month`}
+                      </Text>
+                    </InlineStack>
+                    {recLimitInfo.limit !== null && (
+                      <ProgressBar
+                        progress={Math.min(100, (recLimitInfo.used / recLimitInfo.limit) * 100)}
+                        tone={recLimitInfo.used >= recLimitInfo.limit ? "critical" : recLimitInfo.used >= recLimitInfo.limit * 0.8 ? "attention" : "primary"}
+                      />
+                    )}
+                  </BlockStack>
+                  {recLimitInfo.limit !== null && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {recLimitInfo.remaining} recommendations remaining this month.{" "}
+                      <Link url="/app/billing" removeUnderline>Upgrade plan</Link>
+                    </Text>
+                  )}
+                </BlockStack>
+              </Card>
+
               {/* Purchase Conversion Funnel */}
               <Card>
                 <BlockStack gap="400">
