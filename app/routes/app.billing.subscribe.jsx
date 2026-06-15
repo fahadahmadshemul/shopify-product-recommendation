@@ -1,3 +1,5 @@
+import { useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
   getPlan,
@@ -99,4 +101,12 @@ export const loader = async ({ request }) => {
     redirectUrl.searchParams.set("host", host);
   }
   return redirect(redirectUrl.pathname + redirectUrl.search);
+};
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
 };

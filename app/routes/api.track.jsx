@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { saveActivity } from "../services/tracker.server.js";
 import { checkRateLimit } from "../services/rate-limiter.server";
+import { extractNumericGid } from "../utils/gid.js";
 import db from "../db.server";
 
 // CORS headers for preflight requests
@@ -51,7 +52,7 @@ async function syncProductInBackground(admin, productId, shopDomain) {
         : null;
       const imageUrl = productData.featuredImage ? productData.featuredImage.url : null;
       const variants = productData.variants?.edges || [];
-      const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
+      const firstVariantId = extractNumericGid(variants.length > 0 ? variants[0].node.id : null);
 
       await db.product.create({
         data: {

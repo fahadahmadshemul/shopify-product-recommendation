@@ -18,9 +18,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Boost Sales with Smart Product Recommendations</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          AI-powered personalized product suggestions that increase conversions and average order value on your Shopify store.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -36,16 +36,13 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Smart Recommendations.</strong> AI-powered collaborative filtering learns what your customers love and recommends the right products.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Visitor Analytics.</strong> Track views, cart adds, and purchases to understand customer behavior and measure recommendation impact.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Easy Setup.</strong> Install in minutes — our theme extension automatically adds a beautiful recommendation widget to your product pages.
           </li>
         </ul>
       </div>

@@ -435,7 +435,7 @@
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const variantId = btn.getAttribute("data-variant-id");
+        const variantId = stripGid(btn.getAttribute("data-variant-id"));
         const recId = btn.getAttribute("data-rec-id");
         const label = btn.querySelector(".shopify-recs-atc-label");
         const spinner = btn.querySelector(".shopify-recs-atc-spinner");
@@ -454,9 +454,29 @@
           });
 
           if (res.ok) {
+            btn.classList.remove("loading");
             btn.classList.add("added");
+            spinner.style.display = "none";
             label.textContent = "✓ Added";
             track("cart", recId);
+
+            // Refresh theme cart UI (count badge + drawer)
+            fetch("/cart.js")
+              .then(function (r) { return r.json(); })
+              .then(function (cart) {
+                var count = cart.item_count || 0;
+                // Update cart count badge (Dawn and many themes use these selectors)
+                var badges = document.querySelectorAll(".cart-count-bubble span[aria-hidden='true'], .cart-count, .site-header__cart-count, .header__cart-count, [data-cart-count], .cart-link__count");
+                badges.forEach(function (el) {
+                  el.textContent = count;
+                  if (count === 0) { el.style.display = "none"; }
+                  else { el.style.display = ""; }
+                });
+
+                // Dispatch custom event so theme cart drawers / side carts listen
+                document.dispatchEvent(new CustomEvent("cart:updated", { detail: { cart: cart } }));
+                document.dispatchEvent(new CustomEvent("cart:requestRender"));
+              });
           } else {
             label.textContent = "Error";
             setTimeout(() => {
@@ -508,5 +528,11 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function stripGid(gid) {
+    if (!gid) return gid;
+    var m = gid.match(/\/(\d+)$/);
+    return m ? m[1] : gid;
   }
 })();

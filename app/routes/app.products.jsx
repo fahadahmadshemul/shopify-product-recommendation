@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useRouteError } from "react-router";
 import { useState, useEffect } from "react";
 import {
   Page,
@@ -18,6 +18,7 @@ import {
   Button
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
   syncProductsWithLimit,
@@ -25,6 +26,7 @@ import {
 } from "../services/products.server.js";
 import { authenticate } from "../shopify.server.js";
 import db from "../db.server";
+import { extractNumericGid } from "../utils/gid.js";
 import {
   BILLING_PLAN_KEYS,
   BILLING_PLANS,
@@ -34,14 +36,16 @@ import {
 
 export const loader = async ({ request }) => {
   const { session, billing } = await authenticate.admin(request);
-  const products = await getProductsFromDB(session.shop);
 
-  const isBillingTest = globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false";
-  const billingCheck = await billing.check({
-    plans: PAID_PLAN_KEYS,
-    isTest: isBillingTest,
-  });
-  const activeSubscription = billingCheck.appSubscriptions.find(
+  const [products, billingResult] = await Promise.all([
+    getProductsFromDB(session.shop),
+    billing.check({
+      plans: PAID_PLAN_KEYS,
+      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
+    }),
+  ]);
+
+  const activeSubscription = billingResult.appSubscriptions.find(
     (subscription) => subscription.status === "ACTIVE",
   );
   const activePaidPlan = activeSubscription
@@ -61,13 +65,15 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const actionType = formData.get("action");
 
-  // Get active plan limits
-  const isBillingTest = globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false";
-  const billingCheck = await billing.check({
-    plans: PAID_PLAN_KEYS,
-    isTest: isBillingTest,
-  });
-  const activeSubscription = billingCheck.appSubscriptions.find(
+  const [currentCount, billingResult] = await Promise.all([
+    db.product.count({ where: { shopDomain: session.shop } }),
+    billing.check({
+      plans: PAID_PLAN_KEYS,
+      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
+    }),
+  ]);
+
+  const activeSubscription = billingResult.appSubscriptions.find(
     (subscription) => subscription.status === "ACTIVE",
   );
   const activePaidPlan = activeSubscription
@@ -76,10 +82,6 @@ export const action = async ({ request }) => {
   const activePlanKey = activePaidPlan?.key ?? BILLING_PLAN_KEYS.FREE;
   const activePlan = BILLING_PLANS[activePlanKey];
   const limit = activePlan.limits.products;
-
-  const currentCount = await db.product.count({
-    where: { shopDomain: session.shop },
-  });
 
   if (actionType === "sync") {
     if (limit !== null && currentCount >= limit) {
@@ -121,6 +123,11 @@ export const action = async ({ request }) => {
       const price = product.variants?.[0]?.price
         ? parseFloat(product.variants[0].price)
         : 0;
+      const compareAtPrice = product.variants?.[0]?.compare_at_price
+        ? parseFloat(product.variants[0].compare_at_price)
+        : null;
+      const firstVariantId = extractNumericGid(product.variants?.[0]?.id ?? null);
+      const imageUrl = product.images?.[0]?.originalSrc || null;
 
       await db.product.upsert({
         where: { id: product.id },
@@ -128,7 +135,9 @@ export const action = async ({ request }) => {
           title: product.title,
           handle: product.handle || null,
           price,
-          imageUrl: product.images?.[0]?.originalSrc || null,
+          compareAtPrice,
+          firstVariantId,
+          imageUrl,
           shopDomain: session.shop,
         },
         create: {
@@ -136,7 +145,9 @@ export const action = async ({ request }) => {
           title: product.title,
           handle: product.handle || null,
           price,
-          imageUrl: product.images?.[0]?.originalSrc || null,
+          compareAtPrice,
+          firstVariantId,
+          imageUrl,
           shopDomain: session.shop,
         },
       });
@@ -391,3 +402,11 @@ export default function ProductsPage() {
     </Page>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useRouteError } from "react-router";
 import {
   Badge,
   Banner,
@@ -31,15 +31,16 @@ import { resolveTenant } from "../services/tenant.service.js";
 export const loader = async ({ request }) => {
   const { billing, session } = await authenticate.admin(request);
   const url = new URL(request.url);
-  const shop = await resolveTenant(session);
-  const billingSubscriptionRepo = db.billingSubscription;
-  const isBillingTest =
-    globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false";
-  const billingCheck = await billing.check({
-    plans: PAID_PLAN_KEYS,
-    isTest: isBillingTest,
-  });
-  const activeSubscription = billingCheck.appSubscriptions.find(
+
+  const [shop, billingResult] = await Promise.all([
+    resolveTenant(session),
+    billing.check({
+      plans: PAID_PLAN_KEYS,
+      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
+    }),
+  ]);
+
+  const activeSubscription = billingResult.appSubscriptions.find(
     (subscription) => subscription.status === "ACTIVE",
   );
   const activePaidPlan = activeSubscription
@@ -48,6 +49,7 @@ export const loader = async ({ request }) => {
   const activePlanKey = activePaidPlan?.key ?? BILLING_PLAN_KEYS.FREE;
   const activePlan = BILLING_PLANS[activePlanKey];
 
+  const billingSubscriptionRepo = db.billingSubscription;
   if (activeSubscription && activePaidPlan && billingSubscriptionRepo) {
     await billingSubscriptionRepo.upsert({
       where: { id: activeSubscription.id },
@@ -241,6 +243,10 @@ export default function Billing() {
       </Layout>
     </Page>
   );
+}
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
 }
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);

@@ -1,4 +1,4 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -7,118 +7,110 @@ import { checkRecommendationLimit } from "../services/recommendation-limit.servi
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const totalViews = await db.visitorActivity.count({
-    where: {
-      shopDomain: session.shop,
-      eventType: "view",
-    },
-  });
 
-  //total add to cart (support both "cart" and "add_to_cart")
-  const totalAddToCart = await db.visitorActivity.count({
-    where: {
-      shopDomain: session.shop,
-      eventType: { in: ["cart", "add_to_cart"] }
-    }
-  });
+  // Phase 1 — all independent queries run in parallel
+  const [
+    totalViews,
+    totalAddToCart,
+    totalPurchases,
+    purchases,
+    allRecs,
+    dailyActivities,
+    dbProducts,
+    recLimitInfo,
+  ] = await Promise.all([
+    db.visitorActivity.count({
+      where: { shopDomain: session.shop, eventType: "view" },
+    }),
+    db.visitorActivity.count({
+      where: { shopDomain: session.shop, eventType: { in: ["cart", "add_to_cart"] } },
+    }),
+    db.visitorActivity.count({
+      where: { shopDomain: session.shop, eventType: "purchase" },
+    }),
+    db.visitorActivity.findMany({
+      where: { shopDomain: session.shop, eventType: "purchase" },
+      select: { visitorId: true, productId: true },
+    }),
+    db.recommendation.findMany({
+      where: { shopDomain: session.shop },
+      select: { visitorId: true, productId: true },
+    }),
+    (async () => {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      return db.visitorActivity.findMany({
+        where: { shopDomain: session.shop, createdAt: { gte: sevenDaysAgo } },
+        select: { eventType: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
+    })(),
+    db.product.findMany({
+      where: { shopDomain: session.shop },
+      select: { id: true, title: true, imageUrl: true },
+    }),
+    checkRecommendationLimit(session.shop),
+  ]);
 
-  //Purchase Events
-  const totalPurchases = await db.visitorActivity.count({
-    where: {
-      shopDomain: session.shop,
-      eventType: "purchase"
-    }
-  });
+  // Phase 2 — dependent calculations using Phase 1 results, run in parallel
+  const [
+    { recViews, recPurchasesFromDB },
+    impactRecs,
+  ] = await Promise.all([
+    (async () => {
+      if (allRecs.length === 0) return { recViews: [], recPurchasesFromDB: [] };
+      const recVisitorIds = [...new Set(allRecs.map((r) => r.visitorId))];
+      const recProductIds = [...new Set(allRecs.map((r) => r.productId))];
+      const [views, purchasesFromDb] = await Promise.all([
+        db.visitorActivity.findMany({
+          where: { shopDomain: session.shop, eventType: "view", visitorId: { in: recVisitorIds }, productId: { in: recProductIds } },
+          select: { visitorId: true, productId: true },
+        }),
+        db.visitorActivity.findMany({
+          where: { shopDomain: session.shop, eventType: "purchase", visitorId: { in: recVisitorIds }, productId: { in: recProductIds } },
+          select: { visitorId: true, productId: true },
+        }),
+      ]);
+      return { recViews: views, recPurchasesFromDB: purchasesFromDb };
+    })(),
+    (async () => {
+      if (purchases.length === 0) return [];
+      const visitorIds = [...new Set(purchases.map((p) => p.visitorId))];
+      const productIds = [...new Set(purchases.map((p) => p.productId))];
+      return db.recommendation.findMany({
+        where: { shopDomain: session.shop, visitorId: { in: visitorIds }, productId: { in: productIds } },
+        select: { visitorId: true, productId: true },
+      });
+    })(),
+  ]);
 
-  //⚡ Conversion Rate (Views → Purchase)
+  // Phase 3 — compute metrics from results
   const conversionRate = Math.round(
     totalPurchases > 0 ? (totalPurchases / totalViews) * 100 : 0
   );
 
-  //📈 Recommendation Impact Score
-  // Percentage of purchases that had matching recommendation entries for the buyer and product
-  const purchases = await db.visitorActivity.findMany({
-    where: {
-      shopDomain: session.shop,
-      eventType: "purchase",
-    },
-    select: {
-      visitorId: true,
-      productId: true,
-    },
-  });
-
   let recommendationImpactScore = 0;
   if (purchases.length > 0) {
-    const visitorIds = [...new Set(purchases.map((p) => p.visitorId))];
-    const productIds = [...new Set(purchases.map((p) => p.productId))];
-
-    const recommendations = await db.recommendation.findMany({
-      where: {
-        shopDomain: session.shop,
-        visitorId: { in: visitorIds },
-        productId: { in: productIds },
-      },
-      select: {
-        visitorId: true,
-        productId: true,
-      },
-    });
-
     const recSet = new Set(
-      recommendations.map((r) => `${r.visitorId}_${r.productId}`)
+      impactRecs.map((r) => `${r.visitorId}_${r.productId}`)
     );
-
     let recommendedPurchases = 0;
     for (const purchase of purchases) {
       if (recSet.has(`${purchase.visitorId}_${purchase.productId}`)) {
         recommendedPurchases++;
       }
     }
-
     recommendationImpactScore = Math.round(
       (recommendedPurchases / purchases.length) * 100
     );
   }
 
-  // 2. 📈 Recommendation Performance Analytics
-  // Fetch all recommendations
-  const allRecs = await db.recommendation.findMany({
-    where: { shopDomain: session.shop },
-    select: { visitorId: true, productId: true },
-  });
   const totalRecsGenerated = allRecs.length;
-
-  const recVisitorIds = [...new Set(allRecs.map((r) => r.visitorId))];
-  const recProductIds = [...new Set(allRecs.map((r) => r.productId))];
-
-  // Fetch view activities for matching recommendations
-  const recViews = await db.visitorActivity.findMany({
-    where: {
-      shopDomain: session.shop,
-      eventType: "view",
-      visitorId: { in: recVisitorIds },
-      productId: { in: recProductIds },
-    },
-    select: { visitorId: true, productId: true },
-  });
-
-  // Fetch purchase activities for matching recommendations
-  const recPurchasesFromDB = await db.visitorActivity.findMany({
-    where: {
-      shopDomain: session.shop,
-      eventType: "purchase",
-      visitorId: { in: recVisitorIds },
-      productId: { in: recProductIds },
-    },
-    select: { visitorId: true, productId: true },
-  });
 
   const recLookupSet = new Set(
     allRecs.map((r) => `${r.visitorId}_${r.productId}`)
   );
 
-  // Calculate CTR
   const clickedRecs = new Set();
   for (const view of recViews) {
     const key = `${view.visitorId}_${view.productId}`;
@@ -126,11 +118,10 @@ export const loader = async ({ request }) => {
       clickedRecs.add(key);
     }
   }
-  const recCTR = totalRecsGenerated > 0 
+  const recCTR = totalRecsGenerated > 0
     ? Math.round((clickedRecs.size / totalRecsGenerated) * 100)
     : 0;
 
-  // Calculate Conversion Rate
   const purchasedRecs = new Set();
   for (const p of recPurchasesFromDB) {
     const key = `${p.visitorId}_${p.productId}`;
@@ -143,7 +134,6 @@ export const loader = async ({ request }) => {
     ? Math.round((totalRecPurchases / clickedRecs.size) * 100)
     : 0;
 
-  // Calculate Top 5 best performing recommended products
   const productStatsMap = new Map();
   for (const rec of allRecs) {
     if (!productStatsMap.has(rec.productId)) {
@@ -157,7 +147,6 @@ export const loader = async ({ request }) => {
     productStatsMap.get(rec.productId).impressions++;
   }
 
-  // Count unique visitor clicks
   const uniqueClicks = new Set();
   for (const view of recViews) {
     const key = `${view.visitorId}_${view.productId}`;
@@ -170,7 +159,6 @@ export const loader = async ({ request }) => {
     }
   }
 
-  // Count unique visitor purchases
   const uniquePurchases = new Set();
   for (const p of recPurchasesFromDB) {
     const key = `${p.visitorId}_${p.productId}`;
@@ -183,11 +171,6 @@ export const loader = async ({ request }) => {
     }
   }
 
-  // Fetch product titles and image URLs
-  const dbProducts = await db.product.findMany({
-    where: { shopDomain: session.shop },
-    select: { id: true, title: true, imageUrl: true },
-  });
   const productTitleMap = new Map(dbProducts.map((p) => [p.id, p.title]));
   const productImageMap = new Map(dbProducts.map((p) => [p.id, p.imageUrl]));
 
@@ -199,24 +182,6 @@ export const loader = async ({ request }) => {
     }))
     .sort((a, b) => b.purchases - a.purchases || b.clicks - a.clicks || b.impressions - a.impressions)
     .slice(0, 5);
-
-  // 3. Daily Activity Trend for Chart (Last 7 Days)
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  const dailyActivities = await db.visitorActivity.findMany({
-    where: {
-      shopDomain: session.shop,
-      createdAt: { gte: sevenDaysAgo },
-    },
-    select: {
-      eventType: true,
-      createdAt: true,
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
 
   const dailyDataMap = {};
   for (let i = 6; i >= 0; i--) {
@@ -239,9 +204,6 @@ export const loader = async ({ request }) => {
   }
 
   const chartData = Object.values(dailyDataMap);
-
-  // Plan & recommendation limit info
-  const recLimitInfo = await checkRecommendationLimit(session.shop);
 
   return {
     totalViews,
@@ -709,6 +671,10 @@ export default function Index() {
       </BlockStack>
     </s-page>
   );
+}
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
 }
 
 export const headers = (headersArgs) => {

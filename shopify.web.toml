@@ -1,4 +1,4 @@
-name = "React Router"
+name = "product-recommendation"
 roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
 [commands]

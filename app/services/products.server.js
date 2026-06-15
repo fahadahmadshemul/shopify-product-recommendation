@@ -1,5 +1,6 @@
 import db from "../db.server.js";
 import { authenticate } from "../shopify.server.js";
+import { extractNumericGid } from "../utils/gid.js";
 
 export async function syncProducts(request) {
   const { admin, session } = await authenticate.admin(request);
@@ -43,7 +44,7 @@ export async function syncProducts(request) {
 
   for (const product of products) {
     const variants = product.variants?.edges || [];
-    const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
+    const firstVariantId = extractNumericGid(variants.length > 0 ? variants[0].node.id : null);
     const compareAtPrice = product.compareAtPriceRange
       ? parseFloat(product.compareAtPriceRange.minVariantCompareAtPrice.amount) || null
       : null;
@@ -139,7 +140,7 @@ export async function syncProductsWithLimit(request, limit, currentCount) {
       : null;
     const imageUrl = product.featuredImage ? product.featuredImage.url : null;
     const variants = product.variants?.edges || [];
-    const firstVariantId = variants.length > 0 ? variants[0].node.id : null;
+    const firstVariantId = extractNumericGid(variants.length > 0 ? variants[0].node.id : null);
 
     const saved = await db.product.upsert({
       where: { id: product.id },

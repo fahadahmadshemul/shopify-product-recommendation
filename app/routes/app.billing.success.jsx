@@ -15,18 +15,16 @@ import {
 export const loader = async ({ request }) => {
   const { billing, session } = await authenticate.admin(request);
   const url = new URL(request.url);
-  const shop = await resolveTenant(session);
-  const billingSubscriptionRepo = db.billingSubscription;
-  const isBillingTest =
-    globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false";
 
-  // Perform subscription check and update local database
-  const billingCheck = await billing.check({
-    plans: PAID_PLAN_KEYS,
-    isTest: isBillingTest,
-  });
+  const [shop, billingResult] = await Promise.all([
+    resolveTenant(session),
+    billing.check({
+      plans: PAID_PLAN_KEYS,
+      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
+    }),
+  ]);
 
-  const activeSubscription = billingCheck.appSubscriptions.find(
+  const activeSubscription = billingResult.appSubscriptions.find(
     (subscription) => subscription.status === "ACTIVE",
   );
 
@@ -37,6 +35,7 @@ export const loader = async ({ request }) => {
   const activePlanKey = activePaidPlan?.key ?? BILLING_PLAN_KEYS.FREE;
   const activePlan = BILLING_PLANS[activePlanKey];
 
+  const billingSubscriptionRepo = db.billingSubscription;
   if (activeSubscription && activePaidPlan && billingSubscriptionRepo) {
     await billingSubscriptionRepo.upsert({
       where: { id: activeSubscription.id },
