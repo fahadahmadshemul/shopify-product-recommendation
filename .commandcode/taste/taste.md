@@ -17,3 +17,6 @@
 - Do NOT add GDPR webhook topics (customers/data_request, customers/redact, shop/redact) to shopify.app.toml — Shopify CLI rejects them as invalid during dev preview. Handle GDPR compliance separately. Confidence: 0.70
 - Use session token authentication and the latest version of App Bridge on every embedded admin page to meet Shopify's embedded app highlight criteria. Confidence: 0.70
 
+# polaris
+- Use `roundedAbove="xs"` on Polaris `Card` components to ensure rounded corners on all screen sizes, since the default `roundedAbove="sm"` leaves cards square on mobile (xs). Confidence: 0.70
+

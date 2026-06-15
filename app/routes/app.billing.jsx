@@ -219,6 +219,7 @@ export default function Billing() {
     >
       <Layout>
         <Layout.Section>
+          <Box paddingInline={{ xs: "400", md: "0" }}>
           <BlockStack gap="500">
             <Banner title={`You're on the ${loaderData.activePlanName} plan`} tone="info">
               <p>
@@ -239,6 +240,7 @@ export default function Billing() {
               ))}
             </InlineGrid>
           </BlockStack>
+          </Box>
         </Layout.Section>
       </Layout>
     </Page>

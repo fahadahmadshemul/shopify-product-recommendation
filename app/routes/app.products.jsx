@@ -326,6 +326,7 @@ export default function ProductsPage() {
         },
       ]}
     >
+      <Box paddingInline={{ xs: "400", md: "0" }}>
       <BlockStack gap="500">
         {bannerInfo && (
           <Banner
@@ -399,6 +400,7 @@ export default function ProductsPage() {
           </IndexTable>
         )}
       </BlockStack>
+      </Box>
     </Page>
   );
 }

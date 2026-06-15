@@ -281,394 +281,516 @@ export default function Index() {
 
   return (
     <s-page heading="Product Recommendation">
-      <BlockStack gap="600">
-        {/* Recommendation limit warning */}
-        {recLimitInfo.limit !== null && recLimitInfo.remaining === 0 && (
-          <Banner title={`Monthly recommendation limit reached`} tone="critical">
-            <p>
-              Your {recLimitInfo.planName} plan allows {recLimitInfo.limit} recommendations per month and you&apos;ve used all of them.
-              Storefront recommendations are now paused.{" "}
-              <Link url="/app/billing" removeUnderline>Upgrade to Pro for unlimited recommendations</Link>.
-            </p>
-          </Banner>
-        )}
-        {recLimitInfo.limit !== null && recLimitInfo.remaining > 0 && recLimitInfo.remaining <= 3 && (
-          <Banner title={`Running low on recommendations`} tone="warning">
-            <p>
-              Only {recLimitInfo.remaining} recommendations remaining this month on your {recLimitInfo.planName} plan
-              ({recLimitInfo.used}/{recLimitInfo.limit} used).{" "}
-              <Link url="/app/billing" removeUnderline>Upgrade plan to get more</Link>.
-            </p>
-          </Banner>
-        )}
-
-        {/* Core Store Metrics Grid */}
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd" fontWeight="bold">
-            Store Performance Overview
-          </Text>
-          <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }} gap="400">
-            {/* Total Product Views */}
-            <Box paddingBlockEnd="200">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm" tone="subdued">
-                    Total Product Views
-                  </Text>
-                  <Text as="p" variant="heading3xl" fontWeight="bold">
-                    {totalViews}
-                  </Text>
-                </BlockStack>
-              </Card>
+      <Box paddingInline={{ xs: "400", md: "0" }}>
+        <BlockStack gap="600">
+          {/* Recommendation limit warning */}
+          {recLimitInfo.limit !== null && recLimitInfo.remaining === 0 && (
+            <Box borderRadius="200" overflowX="hidden">
+            <Banner
+              title={`Monthly recommendation limit reached`}
+              tone="critical"
+            >
+              <p>
+                Your {recLimitInfo.planName} plan allows {recLimitInfo.limit}{" "}
+                recommendations per month and you&apos;ve used all of them.
+                Storefront recommendations are now paused.{" "}
+                <Link url="/app/billing" removeUnderline>
+                  Upgrade to Pro for unlimited recommendations
+                </Link>
+                .
+              </p>
+            </Banner>
             </Box>
+          )}
+          {recLimitInfo.limit !== null &&
+            recLimitInfo.remaining > 0 &&
+            recLimitInfo.remaining <= 3 && (
+              <Box borderRadius="200" overflowX="hidden">
+              <Banner title={`Running low on recommendations`} tone="warning">
+                <p>
+                  Only {recLimitInfo.remaining} recommendations remaining this
+                  month on your {recLimitInfo.planName} plan (
+                  {recLimitInfo.used}/{recLimitInfo.limit} used).{" "}
+                  <Link url="/app/billing" removeUnderline>
+                    Upgrade plan to get more
+                  </Link>
+                  .
+                </p>
+              </Banner>
+              </Box>
+            )}
 
-            {/* Total Add To Cart */}
-            <Box paddingBlockEnd="200">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm" tone="subdued">
-                    Total Add To Cart
-                  </Text>
-                  <Text as="p" variant="heading3xl" fontWeight="bold">
-                    {totalAddToCart}
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Box>
-
-            {/* Total Purchased */}
-            <Box paddingBlockEnd="200">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm" tone="subdued">
-                    Total Purchased
-                  </Text>
-                  <Text as="p" variant="heading3xl" fontWeight="bold">
-                    {totalPurchases}
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Box>
-
-            {/* Conversion Rate */}
-            <Box paddingBlockEnd="200">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm" tone="subdued">
-                    Conversion Rate
-                  </Text>
-                  <Text as="p" variant="heading3xl" fontWeight="bold">
-                    {conversionRate}%
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Box>
-
-            {/* Recommendation Impact Score */}
-            <Box paddingBlockEnd="200">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm" tone="subdued">
-                    Recommendation Impact Score
-                  </Text>
-                  <Text as="p" variant="heading3xl" fontWeight="bold">
-                    {recommendationImpactScore}%
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Box>
-          </InlineGrid>
-        </BlockStack>
-
-        <Divider />
-
-        {/* Dashboard Layout: Main Section (Left) and Sidebar Section (Right) */}
-        <Layout>
-          {/* Main Column */}
-          <Layout.Section>
-            <BlockStack gap="400">
-              <BlockStack gap="100">
-                <Text as="h2" variant="headingLg" fontWeight="bold">
-                  Are recommendations working?
-                </Text>
-                <Text as="p" tone="subdued">
-                  Track the performance of generated recommendations and build trust in the recommendation algorithm.
-                </Text>
-              </BlockStack>
-
-              <InlineGrid columns={{ xs: 1, sm: 3, md: 3, lg: 3, xl: 3 }} gap="400">
-                <Card>
-                  <BlockStack gap="150">
-                    <Text as="h3" variant="headingSm" tone="subdued">
-                      Recommendations Generated
+          {/* Core Store Metrics Grid */}
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd" fontWeight="bold">
+              Store Performance Overview
+            </Text>
+            <InlineGrid
+              columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }}
+              gap="400"
+            >
+              {/* Total Product Views */}
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Total Product Views
                     </Text>
-                    <Text as="p" variant="heading2xl" fontWeight="bold">
-                      {totalRecsGenerated}
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {totalViews}
                     </Text>
                   </BlockStack>
                 </Card>
+              </Box>
 
-                <Card>
-                  <BlockStack gap="150">
-                    <Text as="h3" variant="headingSm" tone="subdued">
-                      Click-through Rate (CTR)
+              {/* Total Add To Cart */}
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Total Add To Cart
                     </Text>
-                    <Text as="p" variant="heading2xl" fontWeight="bold">
-                      {recCTR}%
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {totalAddToCart}
                     </Text>
                   </BlockStack>
                 </Card>
+              </Box>
 
-                <Card>
-                  <BlockStack gap="150">
-                    <Text as="h3" variant="headingSm" tone="subdued">
-                      Recommendation Conversion
+              {/* Total Purchased */}
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Total Purchased
                     </Text>
-                    <Text as="p" variant="heading2xl" fontWeight="bold">
-                      {recConversionRate}%
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {totalPurchases}
                     </Text>
                   </BlockStack>
                 </Card>
-              </InlineGrid>
+              </Box>
 
-              {/* Top Performing Recommended Products */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    Top 5 Best Performing Recommended Products
+              {/* Conversion Rate */}
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Conversion Rate
+                    </Text>
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {conversionRate}%
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+
+              {/* Recommendation Impact Score */}
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Recommendation Impact Score
+                    </Text>
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {recommendationImpactScore}%
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+            </InlineGrid>
+          </BlockStack>
+
+          <Divider />
+
+          {/* Dashboard Layout: Main Section (Left) and Sidebar Section (Right) */}
+          <Layout>
+            {/* Main Column */}
+            <Layout.Section>
+              <BlockStack gap="400">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg" fontWeight="bold">
+                    Are recommendations working?
                   </Text>
-                  
-                  {topProducts.length === 0 ? (
-                    <Text as="p" tone="subdued">
-                      No recommendation performance data recorded yet.
-                    </Text>
-                  ) : (
-                    <BlockStack gap="300">
-                      {topProducts.map((product, index) => (
-                        <BlockStack gap="300" key={product.productId}>
-                          {index > 0 && <Divider />}
-                          <InlineStack align="space-between" blockAlign="center">
-                            <InlineStack gap="300" blockAlign="center">
-                              {product.imageUrl ? (
-                                <Thumbnail
-                                  source={product.imageUrl}
-                                  alt={product.title}
-                                  size="small"
-                                />
-                              ) : (
-                                <Box
-                                  background="bg-surface-neutral-active"
-                                  borderRadius="200"
-                                  width="40px"
-                                  height="40px"
-                                />
-                              )}
-                              <BlockStack gap="100">
-                                <Text fontWeight="bold" variant="bodyMd">
-                                  {product.title}
-                                </Text>
-                                <Text tone="subdued" variant="bodySm">
-                                  {product.impressions} impressions • {product.clicks} clicks • {product.purchases} purchases
-                                </Text>
-                              </BlockStack>
-                            </InlineStack>
-                            <InlineStack gap="200">
-                              <Badge tone="info">
-                                {product.impressions > 0 
-                                  ? Math.round((product.clicks / product.impressions) * 100)
-                                  : 0}% CTR
-                              </Badge>
-                              <Badge tone="success">
-                                {product.purchases} sales
-                              </Badge>
-                            </InlineStack>
-                          </InlineStack>
-                        </BlockStack>
-                      ))}
-                    </BlockStack>
-                  )}
+                  <Text as="p" tone="subdued">
+                    Track the performance of generated recommendations and build
+                    trust in the recommendation algorithm.
+                  </Text>
                 </BlockStack>
-              </Card>
-            </BlockStack>
-          </Layout.Section>
 
-          {/* Sidebar Column */}
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="400">
-              {/* Recommendation Usage */}
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    Monthly Recommendation Usage
-                  </Text>
-                  <BlockStack gap="100">
-                    <InlineStack align="space-between">
-                      <Text fontWeight="bold">{recLimitInfo.planName} Plan</Text>
-                      <Text tone={recLimitInfo.limit === null ? "success" : recLimitInfo.used >= recLimitInfo.limit ? "critical" : "subdued"}>
-                        {recLimitInfo.limit === null
-                          ? "Unlimited"
-                          : `${recLimitInfo.used} / ${recLimitInfo.limit} this month`}
+                <InlineGrid
+                  columns={{ xs: 1, sm: 3, md: 3, lg: 3, xl: 3 }}
+                  gap="400"
+                >
+                  <Card roundedAbove="xs">
+                    <BlockStack gap="150">
+                      <Text as="h3" variant="headingSm" tone="subdued">
+                        Recommendations Generated
                       </Text>
-                    </InlineStack>
-                    {recLimitInfo.limit !== null && (
-                      <ProgressBar
-                        progress={Math.min(100, (recLimitInfo.used / recLimitInfo.limit) * 100)}
-                        tone={recLimitInfo.used >= recLimitInfo.limit ? "critical" : recLimitInfo.used >= recLimitInfo.limit * 0.8 ? "attention" : "primary"}
-                      />
+                      <Text as="p" variant="heading2xl" fontWeight="bold">
+                        {totalRecsGenerated}
+                      </Text>
+                    </BlockStack>
+                  </Card>
+
+                  <Card roundedAbove="xs">
+                    <BlockStack gap="150">
+                      <Text as="h3" variant="headingSm" tone="subdued">
+                        Click-through Rate (CTR)
+                      </Text>
+                      <Text as="p" variant="heading2xl" fontWeight="bold">
+                        {recCTR}%
+                      </Text>
+                    </BlockStack>
+                  </Card>
+
+                  <Card roundedAbove="xs">
+                    <BlockStack gap="150">
+                      <Text as="h3" variant="headingSm" tone="subdued">
+                        Recommendation Conversion
+                      </Text>
+                      <Text as="p" variant="heading2xl" fontWeight="bold">
+                        {recConversionRate}%
+                      </Text>
+                    </BlockStack>
+                  </Card>
+                </InlineGrid>
+
+                {/* Top Performing Recommended Products */}
+                <Card roundedAbove="xs">
+                  <BlockStack gap="400">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Top 5 Best Performing Recommended Products
+                    </Text>
+
+                    {topProducts.length === 0 ? (
+                      <Text as="p" tone="subdued">
+                        No recommendation performance data recorded yet.
+                      </Text>
+                    ) : (
+                      <BlockStack gap="300">
+                        {topProducts.map((product, index) => (
+                          <BlockStack gap="300" key={product.productId}>
+                            {index > 0 && <Divider />}
+                            <InlineStack
+                              align="space-between"
+                              blockAlign="center"
+                            >
+                              <InlineStack gap="300" blockAlign="center">
+                                {product.imageUrl ? (
+                                  <Thumbnail
+                                    source={product.imageUrl}
+                                    alt={product.title}
+                                    size="small"
+                                  />
+                                ) : (
+                                  <Box
+                                    background="bg-surface-neutral-active"
+                                    borderRadius="200"
+                                    width="40px"
+                                    height="40px"
+                                  />
+                                )}
+                                <BlockStack gap="100">
+                                  <Text fontWeight="bold" variant="bodyMd">
+                                    {product.title}
+                                  </Text>
+                                  <Text tone="subdued" variant="bodySm">
+                                    {product.impressions} impressions •{" "}
+                                    {product.clicks} clicks •{" "}
+                                    {product.purchases} purchases
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                              <InlineStack gap="200">
+                                <Badge tone="info">
+                                  {product.impressions > 0
+                                    ? Math.round(
+                                        (product.clicks / product.impressions) *
+                                          100,
+                                      )
+                                    : 0}
+                                  % CTR
+                                </Badge>
+                                <Badge tone="success">
+                                  {product.purchases} sales
+                                </Badge>
+                              </InlineStack>
+                            </InlineStack>
+                          </BlockStack>
+                        ))}
+                      </BlockStack>
                     )}
                   </BlockStack>
-                  {recLimitInfo.limit !== null && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {recLimitInfo.remaining} recommendations remaining this month.{" "}
-                      <Link url="/app/billing" removeUnderline>Upgrade plan</Link>
-                    </Text>
-                  )}
-                </BlockStack>
-              </Card>
+                </Card>
+              </BlockStack>
+            </Layout.Section>
 
-              {/* Purchase Conversion Funnel */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    Conversion Funnel
-                  </Text>
+            {/* Sidebar Column */}
+            <Layout.Section variant="oneThird">
+              <BlockStack gap="400">
+                {/* Recommendation Usage */}
+                <Card roundedAbove="xs">
                   <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Monthly Recommendation Usage
+                    </Text>
                     <BlockStack gap="100">
                       <InlineStack align="space-between">
-                        <Text fontWeight="bold">1. Product Views</Text>
-                        <Text fontWeight="bold">{totalViews} (100%)</Text>
-                      </InlineStack>
-                      <ProgressBar progress={100} tone="primary" size="large" />
-                    </BlockStack>
-
-                    <BlockStack gap="100">
-                      <InlineStack align="space-between">
-                        <Text fontWeight="bold">2. Add To Cart</Text>
-                        <Text tone="subdued">
-                          {totalAddToCart} ({totalViews > 0 ? Math.round((totalAddToCart / totalViews) * 100) : 0}%)
+                        <Text fontWeight="bold">
+                          {recLimitInfo.planName} Plan
+                        </Text>
+                        <Text
+                          tone={
+                            recLimitInfo.limit === null
+                              ? "success"
+                              : recLimitInfo.used >= recLimitInfo.limit
+                                ? "critical"
+                                : "subdued"
+                          }
+                        >
+                          {recLimitInfo.limit === null
+                            ? "Unlimited"
+                            : `${recLimitInfo.used} / ${recLimitInfo.limit} this month`}
                         </Text>
                       </InlineStack>
-                      <ProgressBar 
-                        progress={totalViews > 0 ? Math.round((totalAddToCart / totalViews) * 100) : 0} 
-                        tone="attention" 
-                        size="large" 
-                      />
+                      {recLimitInfo.limit !== null && (
+                        <ProgressBar
+                          progress={Math.min(
+                            100,
+                            (recLimitInfo.used / recLimitInfo.limit) * 100,
+                          )}
+                          tone={
+                            recLimitInfo.used >= recLimitInfo.limit
+                              ? "critical"
+                              : recLimitInfo.used >= recLimitInfo.limit * 0.8
+                                ? "attention"
+                                : "primary"
+                          }
+                        />
+                      )}
                     </BlockStack>
+                    {recLimitInfo.limit !== null && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {recLimitInfo.remaining} recommendations remaining this
+                        month.{" "}
+                        <Link url="/app/billing" removeUnderline>
+                          Upgrade plan
+                        </Link>
+                      </Text>
+                    )}
+                  </BlockStack>
+                </Card>
 
-                    <BlockStack gap="100">
-                      <InlineStack align="space-between">
-                        <Text fontWeight="bold">3. Purchases</Text>
-                        <Text tone="subdued">
-                          {totalPurchases} ({totalViews > 0 ? Math.round((totalPurchases / totalViews) * 100) : 0}%)
-                        </Text>
-                      </InlineStack>
-                      <ProgressBar 
-                        progress={totalViews > 0 ? Math.round((totalPurchases / totalViews) * 100) : 0} 
-                        tone="success" 
-                        size="large" 
-                      />
+                {/* Purchase Conversion Funnel */}
+                <Card roundedAbove="xs">
+                  <BlockStack gap="400">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Conversion Funnel
+                    </Text>
+                    <BlockStack gap="300">
+                      <BlockStack gap="100">
+                        <InlineStack align="space-between">
+                          <Text fontWeight="bold">1. Product Views</Text>
+                          <Text fontWeight="bold">{totalViews} (100%)</Text>
+                        </InlineStack>
+                        <ProgressBar
+                          progress={100}
+                          tone="primary"
+                          size="large"
+                        />
+                      </BlockStack>
+
+                      <BlockStack gap="100">
+                        <InlineStack align="space-between">
+                          <Text fontWeight="bold">2. Add To Cart</Text>
+                          <Text tone="subdued">
+                            {totalAddToCart} (
+                            {totalViews > 0
+                              ? Math.round((totalAddToCart / totalViews) * 100)
+                              : 0}
+                            %)
+                          </Text>
+                        </InlineStack>
+                        <ProgressBar
+                          progress={
+                            totalViews > 0
+                              ? Math.round((totalAddToCart / totalViews) * 100)
+                              : 0
+                          }
+                          tone="attention"
+                          size="large"
+                        />
+                      </BlockStack>
+
+                      <BlockStack gap="100">
+                        <InlineStack align="space-between">
+                          <Text fontWeight="bold">3. Purchases</Text>
+                          <Text tone="subdued">
+                            {totalPurchases} (
+                            {totalViews > 0
+                              ? Math.round((totalPurchases / totalViews) * 100)
+                              : 0}
+                            %)
+                          </Text>
+                        </InlineStack>
+                        <ProgressBar
+                          progress={
+                            totalViews > 0
+                              ? Math.round((totalPurchases / totalViews) * 100)
+                              : 0
+                          }
+                          tone="success"
+                          size="large"
+                        />
+                      </BlockStack>
                     </BlockStack>
                   </BlockStack>
-                </BlockStack>
-              </Card>
+                </Card>
 
-              {/* Weekly Performance Trend Chart */}
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    Weekly Trend (Last 7 Days)
-                  </Text>
-                  <div style={{ position: "relative", width: "100%", height: "180px" }}>
-                    <svg viewBox="0 0 460 180" style={{ width: "100%", height: "100%" }}>
-                      {/* Grid Lines */}
-                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                        const y = getY(maxVal * ratio);
-                        return (
+                {/* Weekly Performance Trend Chart */}
+                <Card roundedAbove="xs">
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Weekly Trend (Last 7 Days)
+                    </Text>
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        height: "180px",
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 460 180"
+                        style={{ width: "100%", height: "100%" }}
+                      >
+                        {/* Grid Lines */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                          const y = getY(maxVal * ratio);
+                          return (
+                            <g key={idx}>
+                              <line
+                                x1={paddingLeft}
+                                y1={y}
+                                x2={chartWidth - 15}
+                                y2={y}
+                                stroke="#E1E3E5"
+                                strokeWidth="1"
+                                strokeDasharray="4 4"
+                              />
+                              <text
+                                x={paddingLeft - 6}
+                                y={y + 3}
+                                textAnchor="end"
+                                fontSize="9"
+                                fill="#8C9196"
+                              >
+                                {Math.round(maxVal * ratio)}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* X Labels */}
+                        {chartData.map((day, idx) => (
+                          <text
+                            key={idx}
+                            x={getX(idx)}
+                            y={chartHeight + paddingTop + 18}
+                            textAnchor="middle"
+                            fontSize="9"
+                            fill="#8C9196"
+                          >
+                            {day.label}
+                          </text>
+                        ))}
+
+                        {/* Views Area & Line */}
+                        <path
+                          d={getViewsAreaPath()}
+                          fill="rgba(0, 128, 255, 0.08)"
+                        />
+                        <path
+                          d={getViewsLinePath()}
+                          fill="none"
+                          stroke="#0080FF"
+                          strokeWidth="2.5"
+                        />
+
+                        {/* Purchases Area & Line */}
+                        <path
+                          d={getPurchasesAreaPath()}
+                          fill="rgba(46, 204, 113, 0.08)"
+                        />
+                        <path
+                          d={getPurchasesLinePath()}
+                          fill="none"
+                          stroke="#2ECC71"
+                          strokeWidth="2.5"
+                        />
+
+                        {/* Data dots */}
+                        {chartData.map((day, idx) => (
                           <g key={idx}>
-                            <line
-                              x1={paddingLeft}
-                              y1={y}
-                              x2={chartWidth - 15}
-                              y2={y}
-                              stroke="#E1E3E5"
-                              strokeWidth="1"
-                              strokeDasharray="4 4"
+                            <circle
+                              cx={getX(idx)}
+                              cy={getY(day.views)}
+                              r="3.5"
+                              fill="#FFFFFF"
+                              stroke="#0080FF"
+                              strokeWidth="1.5"
                             />
-                            <text
-                              x={paddingLeft - 6}
-                              y={y + 3}
-                              textAnchor="end"
-                              fontSize="9"
-                              fill="#8C9196"
-                            >
-                              {Math.round(maxVal * ratio)}
-                            </text>
+                            <circle
+                              cx={getX(idx)}
+                              cy={getY(day.purchases)}
+                              r="3.5"
+                              fill="#FFFFFF"
+                              stroke="#2ECC71"
+                              strokeWidth="1.5"
+                            />
                           </g>
-                        );
-                      })}
+                        ))}
+                      </svg>
+                    </div>
 
-                      {/* X Labels */}
-                      {chartData.map((day, idx) => (
-                        <text
-                          key={idx}
-                          x={getX(idx)}
-                          y={chartHeight + paddingTop + 18}
-                          textAnchor="middle"
-                          fontSize="9"
-                          fill="#8C9196"
-                        >
-                          {day.label}
-                        </text>
-                      ))}
-
-                      {/* Views Area & Line */}
-                      <path d={getViewsAreaPath()} fill="rgba(0, 128, 255, 0.08)" />
-                      <path d={getViewsLinePath()} fill="none" stroke="#0080FF" strokeWidth="2.5" />
-
-                      {/* Purchases Area & Line */}
-                      <path d={getPurchasesAreaPath()} fill="rgba(46, 204, 113, 0.08)" />
-                      <path d={getPurchasesLinePath()} fill="none" stroke="#2ECC71" strokeWidth="2.5" />
-
-                      {/* Data dots */}
-                      {chartData.map((day, idx) => (
-                        <g key={idx}>
-                          <circle
-                            cx={getX(idx)}
-                            cy={getY(day.views)}
-                            r="3.5"
-                            fill="#FFFFFF"
-                            stroke="#0080FF"
-                            strokeWidth="1.5"
-                          />
-                          <circle
-                            cx={getX(idx)}
-                            cy={getY(day.purchases)}
-                            r="3.5"
-                            fill="#FFFFFF"
-                            stroke="#2ECC71"
-                            strokeWidth="1.5"
-                          />
-                        </g>
-                      ))}
-                    </svg>
-                  </div>
-
-                  <InlineStack align="center" gap="400">
-                    <InlineStack gap="150" blockAlign="center">
-                      <span style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#0080FF", borderRadius: "2px" }} />
-                      <Text variant="bodySm" tone="subdued">Views</Text>
+                    <InlineStack align="center" gap="400">
+                      <InlineStack gap="150" blockAlign="center">
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: "10px",
+                            height: "10px",
+                            backgroundColor: "#0080FF",
+                            borderRadius: "2px",
+                          }}
+                        />
+                        <Text variant="bodySm" tone="subdued">
+                          Views
+                        </Text>
+                      </InlineStack>
+                      <InlineStack gap="150" blockAlign="center">
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: "10px",
+                            height: "10px",
+                            backgroundColor: "#2ECC71",
+                            borderRadius: "2px",
+                          }}
+                        />
+                        <Text variant="bodySm" tone="subdued">
+                          Purchases
+                        </Text>
+                      </InlineStack>
                     </InlineStack>
-                    <InlineStack gap="150" blockAlign="center">
-                      <span style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#2ECC71", borderRadius: "2px" }} />
-                      <Text variant="bodySm" tone="subdued">Purchases</Text>
-                    </InlineStack>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            </BlockStack>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
+                  </BlockStack>
+                </Card>
+              </BlockStack>
+            </Layout.Section>
+          </Layout>
+        </BlockStack>
+      </Box>
     </s-page>
   );
 }
