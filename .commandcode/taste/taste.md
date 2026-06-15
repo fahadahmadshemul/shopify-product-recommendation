@@ -15,4 +15,5 @@
 # shopify
 - Strip Shopify Admin API GID prefixes (e.g., `gid://shopify/ProductVariant/123` → `123`) before storing variant IDs, since storefront endpoints like `/cart/add.js` require plain numeric IDs. Confidence: 0.65
 - Do NOT add GDPR webhook topics (customers/data_request, customers/redact, shop/redact) to shopify.app.toml — Shopify CLI rejects them as invalid during dev preview. Handle GDPR compliance separately. Confidence: 0.70
+- Use session token authentication and the latest version of App Bridge on every embedded admin page to meet Shopify's embedded app highlight criteria. Confidence: 0.70
 
