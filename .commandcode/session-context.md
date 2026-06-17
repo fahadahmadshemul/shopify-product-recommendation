@@ -39,17 +39,19 @@ Shopify embedded app that injects personalized product recommendation widgets on
 
 ---
 
-## Billing Plans
+## Billing Plans (Updated 2026-06-17 — International Standard Pricing)
 
-| Plan | Products | Recommendations/Month | Price |
-|---|---|---|---|
-| **Free** | 2 | 10 | $0 |
-| **Basic** | 7 | 15 | $7.99/mo (7-day trial) |
-| **Pro** | Unlimited | Unlimited | $13.99/mo (7-day trial) |
+| Plan | Products | Recs/Month | Price | Trial | Target |
+|---|---|---|---|---|---|
+| **Free** | 10 | 500 | $0 | — | Solo makers testing the water |
+| **Basic** | 100 | 5,000 | $9.99/mo | 14 days | Small stores scaling their catalog |
+| **Pro** | Unlimited | Unlimited | $39.99/mo | 14 days | High-volume brands with advanced needs |
 
-Plan definitions in `app/services/billing.service.js`. Limit enforcement in `app/services/recommendation-limit.service.js`.
-
-**Important:** `SHOPIFY_BILLING_TEST=true` in `.env` — set to `false` before production deploy for real charges.
+### Rationale
+- **Free tier generous enough** (10 products, 500 recs) to demonstrate real value on a small catalog without feeling useless. No credit card requirement lowers signup friction
+- **Basic bridges the gap** between free and Pro — reasonable limits for a store with 50–100 products. $9.99/mo is impulse-buy territory for a Shopify merchant already paying $29–$299/mo for their store plan
+- **Pro at $39.99/mo** aligns with mid-tier Shopify app pricing. Unlimited everything + advanced analytics (unique visitors, session duration, revenue estimates) + priority scoring justifies the jump
+- **14-day trials on paid plans** match industry standard (Shopify's own plans use 14-day trials). Longer trial = more data collected = stickier conversion
 
 ---
 
