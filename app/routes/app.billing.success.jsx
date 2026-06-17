@@ -48,12 +48,18 @@ export const loader = async ({ request }) => {
         currentPeriodEndsAt: activeSubscription.currentPeriodEnd
           ? new Date(activeSubscription.currentPeriodEnd)
           : null,
+        trialEndsAt: activeSubscription.trialEnd
+          ? new Date(activeSubscription.trialEnd)
+          : null,
       },
       update: {
         planKey: activePaidPlan.key,
         status: activeSubscription.status,
         currentPeriodEndsAt: activeSubscription.currentPeriodEnd
           ? new Date(activeSubscription.currentPeriodEnd)
+          : null,
+        trialEndsAt: activeSubscription.trialEnd
+          ? new Date(activeSubscription.trialEnd)
           : null,
       },
     });

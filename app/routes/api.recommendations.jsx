@@ -79,6 +79,9 @@ export const loader = async ({ request }) => {
     const RECENCY_HALF_LIFE_DAYS = 14;
     const RECENCY_DECAY_RATE = Math.LN2 / RECENCY_HALF_LIFE_DAYS;
 
+    const isProPlan = limitCheck.planKey === "PRO";
+    const priorityBoost = isProPlan ? 1.5 : 1;
+
     // 1. Find other visitors who interacted with the current product
     const otherVisitors = await db.visitorActivity.findMany({
       where: {
@@ -119,7 +122,7 @@ export const loader = async ({ request }) => {
         const daysAgo = (now - new Date(event.createdAt).getTime()) / (1000 * 60 * 60 * 24);
         const recencyFactor = Math.exp(-RECENCY_DECAY_RATE * daysAgo);
         const eventWeight = EVENT_WEIGHTS[event.eventType] || 1;
-        const score = eventWeight * recencyFactor;
+        const score = eventWeight * recencyFactor * priorityBoost;
 
         scoreMap.set(event.productId, (scoreMap.get(event.productId) || 0) + score);
       }
@@ -156,7 +159,7 @@ export const loader = async ({ request }) => {
         const daysAgo = (now2 - new Date(event.createdAt).getTime()) / (1000 * 60 * 60 * 24);
         const recencyFactor = Math.exp(-RECENCY_DECAY_RATE * daysAgo);
         const eventWeight = EVENT_WEIGHTS[event.eventType] || 1;
-        const score = eventWeight * recencyFactor;
+        const score = eventWeight * recencyFactor * priorityBoost;
         fallbackMap.set(event.productId, (fallbackMap.get(event.productId) || 0) + score);
       }
 

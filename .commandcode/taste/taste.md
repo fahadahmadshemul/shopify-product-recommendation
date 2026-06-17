@@ -5,6 +5,7 @@
 # workflow
 - When reviewing a system, explore all related files thoroughly first, then proactively implement the improvements rather than just providing analysis. Confidence: 0.70
 - Document all features comprehensively in .commandcode/session-context.md as a complete project reference that can be rewritten from scratch for clarity when needed. Confidence: 0.90
+- Save codebase gap analysis findings (bugs, missing features, incomplete implementations) to session-context.md so future sessions can pick up context even if the conversation is lost. Confidence: 0.70
 
 # communication
 - Use English or Banglish (Bangla written in Roman script), never Bangla script for output. Confidence: 0.90

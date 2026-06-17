@@ -62,12 +62,18 @@ export const loader = async ({ request }) => {
         currentPeriodEndsAt: activeSubscription.currentPeriodEnd
           ? new Date(activeSubscription.currentPeriodEnd)
           : null,
+        trialEndsAt: activeSubscription.trialEnd
+          ? new Date(activeSubscription.trialEnd)
+          : null,
       },
       update: {
         planKey: activePaidPlan.key,
         status: activeSubscription.status,
         currentPeriodEndsAt: activeSubscription.currentPeriodEnd
           ? new Date(activeSubscription.currentPeriodEnd)
+          : null,
+        trialEndsAt: activeSubscription.trialEnd
+          ? new Date(activeSubscription.trialEnd)
           : null,
       },
     });
@@ -78,12 +84,18 @@ export const loader = async ({ request }) => {
     });
   }
 
+  const trialInfo = await billingSubscriptionRepo?.findFirst({
+    where: { shopId: shop.id, status: "ACTIVE" },
+    select: { trialEndsAt: true, status: true },
+  });
+
   return {
     plans: Object.values(BILLING_PLANS),
     activePlanKey,
     activePlanName: activePlan.name,
     shopDomain: session.shop,
     host: url.searchParams.get("host"),
+    trialEndsAt: trialInfo?.trialEndsAt || null,
   };
 };
 
@@ -201,6 +213,11 @@ function PlanCard({ plan, isActive, isFeatured, actionUrl }) {
 export default function Billing() {
   const loaderData = useLoaderData();
 
+  const isInTrial = loaderData.trialEndsAt && new Date(loaderData.trialEndsAt) > new Date();
+  const trialDaysLeft = isInTrial
+    ? Math.ceil((new Date(loaderData.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))
+    : 0;
+
   const getActionUrl = () => {
     const params = new URLSearchParams();
   
@@ -221,6 +238,19 @@ export default function Billing() {
         <Layout.Section>
           <Box paddingInline={{ xs: "400", md: "0" }}>
           <BlockStack gap="500">
+            {isInTrial && (
+              <Banner
+                title={`Free trial: ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining`}
+                tone="warning"
+              >
+                <p>
+                  Your {loaderData.activePlanName} plan has a {trialDaysLeft}-day free trial. 
+                  You won&apos;t be charged until the trial ends.
+                  {trialDaysLeft <= 2 && " Your trial is ending soon — choose a plan to continue using premium features."}
+                </p>
+              </Banner>
+            )}
+
             <Banner title={`You're on the ${loaderData.activePlanName} plan`} tone="info">
               <p>
                 Upgrade anytime to unlock more product sync capacity, visitor tracking,

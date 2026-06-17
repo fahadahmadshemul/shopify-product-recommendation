@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { saveActivity } from "../services/tracker.server.js";
 import { checkRateLimit } from "../services/rate-limiter.server";
+import { getActivePlan } from "../services/recommendation-limit.service";
 import { extractNumericGid } from "../utils/gid.js";
 import db from "../db.server";
 
@@ -11,8 +12,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-async function syncProductInBackground(admin, productId, shopDomain) {
+async function syncProductInBackground(admin, productId, shopDomain, productLimit) {
   try {
+    const currentCount = await db.product.count({
+      where: { shopDomain },
+    });
+
+    if (productLimit !== null && currentCount >= productLimit) {
+      console.log(`Background sync skipped: product limit (${productLimit}) reached for ${shopDomain}`);
+      return;
+    }
+
     const gqlResponse = await admin.graphql(`
       query {
         product(id: "${productId}") {
@@ -117,13 +127,14 @@ export const action = async ({ request }) => {
       );
     }
 
-    // Fire-and-forget: sync missing product without blocking the response
+    // Fire-and-forget: sync missing product without blocking the response, respecting plan limit
     const exists = await db.product.findUnique({
       where: { id: productId },
     });
 
     if (!exists && admin) {
-      syncProductInBackground(admin, productId, shopDomain);
+      const plan = await getActivePlan(shopDomain);
+      syncProductInBackground(admin, productId, shopDomain, plan.limits.products);
     }
 
     // Save visitor activity (view, cart, purchase)

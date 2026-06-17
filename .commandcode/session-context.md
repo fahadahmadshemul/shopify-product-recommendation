@@ -280,3 +280,61 @@ Key points:
 - **Fire-and-forget sync** — product sync from Shopify happens in background, doesn't block API responses
 - **Numeric variant IDs** — all `firstVariantId` stored as plain numeric string (GID stripped at storage time)
 - **No extracted components** — all Polaris UI code inline in route files (components/ dirs exist but empty)
+
+---
+
+## Billing Plan Implementation Gaps (Audited 2026-06-17)
+
+Plan definitions in `app/services/billing.service.js` define limits & features. Below is the audit of what's implemented vs missing.
+
+### ✅ Implemented
+- **Product sync limit** (Free=2, Basic=7, Pro=unlimited) — enforced in `app.products.jsx` action (sync & add_products both check `limit.products`)
+- **Recommendation limit** (Free=10, Basic=15, Pro=unlimited) — enforced via `recommendation-limit.service.js` in `api.recommendations.jsx`
+- **Monthly recommendation reset** — calendar month-based counting (`new Date(year, month, 1)`)
+- **7-day trial** — Shopify billing config has `trialDays: 7`, Shopify handles billing grace period
+- **Billing plan cards** — `app.billing.jsx` renders 3 plans with features, pricing, trial info
+- **Upgrade/downgrade flow** — `app.billing.subscribe.jsx` handles paid plan request + Free cancel
+- **Subscription webhook** — `APP_SUBSCRIPTIONS_UPDATE` in `shopify.server.js` syncs subscription status to DB
+
+### ❌ Gaps (Priority-Ordered)
+
+#### 🔴 P1 — ~~Background sync bypasses product limit~~ ✅ FIXED
+**File:** `app/routes/api.track.jsx` — `syncProductInBackground()`
+**Fix:** Added `getActivePlan()` call to resolve plan limit, `syncProductInBackground` now receives `productLimit` parameter and skips syncing when limit is reached. Product count is checked before fetching from Shopify.
+
+#### 🔴 P2 — ~~Trial tracking not implemented~~ ✅ FIXED
+**Files:** `app/shopify.server.js`, `app/routes/app.billing.jsx`, `app/routes/app.billing.success.jsx`, `app/routes/app._index.jsx`
+**Fix:**
+1. Webhook handler (`APP_SUBSCRIPTIONS_UPDATE`): resolves correct `Shop.id` via `prisma.shop.findUnique()`, sets `trialEndsAt` from `subscription.trial_ends_at` and `currentPeriodEndsAt` from `subscription.current_period_end`, handles both `app_subscription` and `appSubscription` payload formats
+2. All subscription upserts (`app.billing.jsx`, `app.billing.success.jsx`, `app.products.jsx`): now pass `trialEndsAt` from `activeSubscription.trialEnd`
+3. Billing page: loader queries `trialEndsAt` from DB, UI shows trial banner with days remaining + urgency message when ≤2 days left
+4. Dashboard: Phase 1 parallel query fetches `trialEndsAt`, UI shows trial banner with end date + upgrade link, tone escalates to critical when ≤2 days left
+
+#### 🟡 P3 — ~~`analytics: false` not enforced~~ ✅ FIXED
+**File:** `app/routes/app._index.jsx`
+**Fix:** Dashboard now gates advanced analytics behind `analyticsEnabled` (Pro plan only). Free/Basic users see basic store metrics (views, carts, purchases, conversion rate) and recommendation usage bar only. Pro-exclusive sections (Recommendation Impact Score, "Are recommendations working?" with CTR/rec conversion/top 5 products table, Conversion Funnel, Weekly Trend SVG chart) are hidden for Free/Basic and replaced with an "Advanced Analytics Locked — Upgrade to Pro" card. Sidebar analytics (Funnel + Weekly Trend) also gated.
+
+#### 🟡 P4 — ~~Webhook handler incomplete~~ ✅ FIXED (as part of P2)
+**File:** `app/shopify.server.js` — `APP_SUBSCRIPTIONS_UPDATE` callback
+**Fix:** Handler now resolves correct `Shop.id` via `prisma.shop.findUnique()`, sets `trialEndsAt` and `currentPeriodEndsAt` from webhook payload, handles both `app_subscription` and `appSubscription` payload field formats.
+
+#### 🟡 P5 — ~~Pro "Priority recommendation scoring" NOT implemented~~ ✅ FIXED
+**File:** `app/routes/api.recommendations.jsx`
+**Fix:** Pro plan users get 1.5× scoring boost (`priorityBoost`) applied to both collaborative filtering and fallback recommendation scoring. Resolved via `limitCheck.planKey === "PRO"` (already available from limit check). Free/Basic plans use `priorityBoost = 1` (no change).
+
+#### 🟢 P6 — ~~Pro "Advanced visitor analytics" NOT implemented~~ ✅ FIXED
+**File:** `app/routes/app._index.jsx`
+**Fix:** Pro plan now has exclusive "Advanced Visitor Analytics" section with 3 metric cards: Unique Visitors (visitorId groupBy count), Avg. Session Duration (average of `duration` field in seconds), Est. Revenue (total purchases × avg order value projection). Queries added to Phase 1 parallel fetch via `groupBy` and `aggregate`. Section gated behind `analyticsEnabled`.
+
+#### 🟢 P7 — ~~`shopify.app.toml` scopes outdated~~ ✅ FIXED
+**File:** `shopify.app.toml`
+**Fix:** Changed scopes from `write_products,write_metaobjects,write_metaobject_definitions` to `read_products` to match actual app usage.
+
+### Fix History (This Audit)
+- [x] P1: Background sync product limit check
+- [x] P2: Trial tracking (webhook + UI banners)
+- [x] P3: Analytics gating by plan
+- [x] P4: Complete webhook handler (currentPeriodEndsAt, trialEndsAt, correct shopId)
+- [x] P5: Pro priority scoring
+- [x] P6: Pro advanced analytics
+- [x] P7: Toml scopes fix

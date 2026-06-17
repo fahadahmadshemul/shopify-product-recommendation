@@ -18,6 +18,9 @@ export const loader = async ({ request }) => {
     dailyActivities,
     dbProducts,
     recLimitInfo,
+    trialEndsAt,
+    uniqueVisitors,
+    avgDuration,
   ] = await Promise.all([
     db.visitorActivity.count({
       where: { shopDomain: session.shop, eventType: "view" },
@@ -50,6 +53,19 @@ export const loader = async ({ request }) => {
       select: { id: true, title: true, imageUrl: true },
     }),
     checkRecommendationLimit(session.shop),
+    db.billingSubscription.findFirst({
+      where: { shop: { shop: session.shop }, status: "ACTIVE" },
+      select: { trialEndsAt: true },
+    }),
+    db.visitorActivity.groupBy({
+      by: ["visitorId"],
+      where: { shopDomain: session.shop },
+      _count: { visitorId: true },
+    }).then((rows) => rows.length),
+    db.visitorActivity.aggregate({
+      where: { shopDomain: session.shop, duration: { not: null } },
+      _avg: { duration: true },
+    }).then((agg) => Math.round(agg._avg.duration || 0)),
   ]);
 
   // Phase 2 — dependent calculations using Phase 1 results, run in parallel
@@ -217,6 +233,9 @@ export const loader = async ({ request }) => {
     topProducts,
     chartData,
     recLimitInfo,
+    trialEndsAt: trialEndsAt?.trialEndsAt || null,
+    uniqueVisitors,
+    avgDuration,
   };
 };
 
@@ -233,7 +252,16 @@ export default function Index() {
     topProducts,
     chartData,
     recLimitInfo,
+    trialEndsAt,
+    uniqueVisitors,
+    avgDuration,
   } = useLoaderData();
+
+  const isInTrial = trialEndsAt && new Date(trialEndsAt) > new Date();
+  const trialDaysLeft = isInTrial
+    ? Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const analyticsEnabled = recLimitInfo.planKey === "PRO";
 
   // Helper functions for SVG chart plotting
   const maxVal = Math.max(...chartData.map((d) => Math.max(d.views, d.purchases)), 5);
@@ -283,6 +311,25 @@ export default function Index() {
     <s-page heading="Product Recommendation">
       <Box paddingInline={{ xs: "400", md: "0" }}>
         <BlockStack gap="600">
+          {/* Trial warning banner */}
+          {isInTrial && (
+            <Box borderRadius="200" overflowX="hidden">
+            <Banner
+              title={`${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} left in your free trial`}
+              tone={trialDaysLeft <= 2 ? "critical" : "warning"}
+            >
+              <p>
+                Your trial ends on {new Date(trialEndsAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}.
+                {trialDaysLeft <= 2
+                  ? " Upgrade now to keep your premium features."
+                  : " Choose a plan before your trial ends to continue using premium features."}
+                {" "}
+                <RouterLink to="/app/billing">Manage plan</RouterLink>.
+              </p>
+            </Banner>
+            </Box>
+          )}
+
           {/* Recommendation limit warning */}
           {recLimitInfo.limit !== null && recLimitInfo.remaining === 0 && (
             <Box borderRadius="200" overflowX="hidden">
@@ -386,6 +433,7 @@ export default function Index() {
               </Box>
 
               {/* Recommendation Impact Score */}
+              {analyticsEnabled && (
               <Box paddingBlockEnd="200">
                 <Card roundedAbove="xs">
                   <BlockStack gap="200">
@@ -398,14 +446,86 @@ export default function Index() {
                   </BlockStack>
                 </Card>
               </Box>
+              )}
+
+              {!analyticsEnabled && (
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Advanced Analytics
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Upgrade to Pro to unlock detailed analytics.
+                    </Text>
+                    <RouterLink to="/app/billing">Upgrade to Pro</RouterLink>
+                  </BlockStack>
+                </Card>
+              </Box>
+              )}
             </InlineGrid>
           </BlockStack>
+
+          {analyticsEnabled && (
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd" fontWeight="bold">
+              Advanced Visitor Analytics
+            </Text>
+            <InlineGrid
+              columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }}
+              gap="400"
+            >
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Unique Visitors
+                    </Text>
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {uniqueVisitors}
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Avg. Session Duration
+                    </Text>
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      {avgDuration}s
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+
+              <Box paddingBlockEnd="200">
+                <Card roundedAbove="xs">
+                  <BlockStack gap="200">
+                    <Text as="h2" variant="headingSm" tone="subdued">
+                      Est. Revenue
+                    </Text>
+                    <Text as="p" variant="heading3xl" fontWeight="bold">
+                      ${(totalPurchases * 29.99).toLocaleString()}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Based on avg. order value
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+            </InlineGrid>
+          </BlockStack>
+          )}
 
           <Divider />
 
           {/* Dashboard Layout: Main Section (Left) and Sidebar Section (Right) */}
           <Layout>
             {/* Main Column */}
+            {analyticsEnabled ? (
             <Layout.Section>
               <BlockStack gap="400">
                 <BlockStack gap="100">
@@ -525,6 +645,21 @@ export default function Index() {
                 </Card>
               </BlockStack>
             </Layout.Section>
+            ) : (
+            <Layout.Section>
+              <Card roundedAbove="xs">
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd" fontWeight="bold">
+                    Advanced Analytics Locked
+                  </Text>
+                  <Text as="p" tone="subdued">
+                    Upgrade to Pro to unlock detailed recommendation analytics including CTR, conversion rates, top performing products, and 7-day trend charts.
+                  </Text>
+                  <RouterLink to="/app/billing">Upgrade to Pro</RouterLink>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+            )}
 
             {/* Sidebar Column */}
             <Layout.Section variant="oneThird">
@@ -582,6 +717,8 @@ export default function Index() {
                   </BlockStack>
                 </Card>
 
+                {analyticsEnabled && (
+                <>
                 {/* Purchase Conversion Funnel */}
                 <Card roundedAbove="xs">
                   <BlockStack gap="400">
@@ -786,6 +923,8 @@ export default function Index() {
                     </InlineStack>
                   </BlockStack>
                 </Card>
+                </>
+                )}
               </BlockStack>
             </Layout.Section>
           </Layout>
