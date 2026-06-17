@@ -1,8 +1,8 @@
-import { useLoaderData, useRouteError } from "react-router";
+import { useLoaderData, useRouteError, Link as RouterLink } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { Card, Text, BlockStack, Box, InlineGrid, Layout, InlineStack, Badge, Thumbnail, Divider, ProgressBar, Banner, Link } from "@shopify/polaris";
+import { Card, Text, BlockStack, Box, InlineGrid, Layout, InlineStack, Badge, Thumbnail, Divider, ProgressBar, Banner } from "@shopify/polaris";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 
 export const loader = async ({ request }) => {
@@ -294,9 +294,9 @@ export default function Index() {
                 Your {recLimitInfo.planName} plan allows {recLimitInfo.limit}{" "}
                 recommendations per month and you&apos;ve used all of them.
                 Storefront recommendations are now paused.{" "}
-                <Link url="/app/billing" removeUnderline>
+                <RouterLink to="/app/billing">
                   Upgrade to Pro for unlimited recommendations
-                </Link>
+                </RouterLink>
                 .
               </p>
             </Banner>
@@ -311,9 +311,9 @@ export default function Index() {
                   Only {recLimitInfo.remaining} recommendations remaining this
                   month on your {recLimitInfo.planName} plan (
                   {recLimitInfo.used}/{recLimitInfo.limit} used).{" "}
-                  <Link url="/app/billing" removeUnderline>
+                  <RouterLink to="/app/billing">
                     Upgrade plan to get more
-                  </Link>
+                  </RouterLink>
                   .
                 </p>
               </Banner>
@@ -574,9 +574,9 @@ export default function Index() {
                       <Text as="p" variant="bodySm" tone="subdued">
                         {recLimitInfo.remaining} recommendations remaining this
                         month.{" "}
-                        <Link url="/app/billing" removeUnderline>
+                        <RouterLink to="/app/billing">
                           Upgrade plan
-                        </Link>
+                        </RouterLink>
                       </Text>
                     )}
                   </BlockStack>

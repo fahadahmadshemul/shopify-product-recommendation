@@ -1,4 +1,10 @@
-import { useLoaderData, useFetcher, useRouteError } from "react-router";
+import {
+  useLoaderData,
+  useFetcher,
+  useRouteError,
+  Link as RouterLink,
+} from "react-router";
+
 import { useState, useEffect } from "react";
 import {
   Page,
@@ -13,9 +19,8 @@ import {
   Card,
   Box,
   InlineStack,
-  Link,
   Badge,
-  Button
+  Button,
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -95,7 +100,7 @@ export const action = async ({ request }) => {
     return Response.json({
       success: true,
       count: synced.length,
-      limitExceeded: limit !== null && (currentCount + synced.length >= limit),
+      limitExceeded: limit !== null && currentCount + synced.length >= limit,
     });
   }
 
@@ -126,7 +131,9 @@ export const action = async ({ request }) => {
       const compareAtPrice = product.variants?.[0]?.compare_at_price
         ? parseFloat(product.variants[0].compare_at_price)
         : null;
-      const firstVariantId = extractNumericGid(product.variants?.[0]?.id ?? null);
+      const firstVariantId = extractNumericGid(
+        product.variants?.[0]?.id ?? null,
+      );
       const imageUrl = product.images?.[0]?.originalSrc || null;
 
       await db.product.upsert({
@@ -213,7 +220,8 @@ export default function ProductsPage() {
 
         if (fetcher.data.limitExceeded) {
           setBannerInfo({
-            title: "Product limit reached for your current plan. Some products were skipped.",
+            title:
+              "Product limit reached for your current plan. Some products were skipped.",
             tone: "warning",
           });
         }
@@ -239,7 +247,7 @@ export default function ProductsPage() {
             action: "add_products",
             products: JSON.stringify(selected),
           },
-          { method: "POST" }
+          { method: "POST" },
         );
       }
     } catch (err) {
@@ -253,7 +261,7 @@ export default function ProductsPage() {
         action: "delete_products",
         productIds: JSON.stringify([productId]),
       },
-      { method: "POST" }
+      { method: "POST" },
     );
   };
 
@@ -263,7 +271,7 @@ export default function ProductsPage() {
         action: "delete_products",
         productIds: JSON.stringify(selectedResources),
       },
-      { method: "POST" }
+      { method: "POST" },
     );
   };
 
@@ -327,79 +335,80 @@ export default function ProductsPage() {
       ]}
     >
       <Box paddingInline={{ xs: "400", md: "0" }}>
-      <BlockStack gap="500">
-        {bannerInfo && (
-          <Banner
-            title={bannerInfo.title}
-            tone={bannerInfo.tone}
-            onDismiss={() => setBannerInfo(null)}
-          />
-        )}
+        <BlockStack gap="500">
+          {bannerInfo && (
+            <Banner
+              title={bannerInfo.title}
+              tone={bannerInfo.tone}
+              onDismiss={() => setBannerInfo(null)}
+            />
+          )}
 
-        {/* Plan Limit Status */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <BlockStack gap="100">
-                <Text as="h3" variant="headingSm">
-                  Plan Limit Status:{" "}
-                  <Badge tone={isLimitReached ? "critical" : "info"}>
-                    {activePlan.name} Plan
-                  </Badge>
-                </Text>
-                <Text variant="bodyMd" tone="subdued">
-                  {limit !== null
-                    ? `You have synced ${products.length} out of ${limit} products allowed.`
-                    : `You have synced ${products.length} products (Unlimited sync).`}
-                </Text>
-              </BlockStack>
+          {/* Plan Limit Status */}
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">
+                    Plan Limit Status:{" "}
+                    <Badge tone={isLimitReached ? "critical" : "info"}>
+                      {activePlan.name} Plan
+                    </Badge>
+                  </Text>
+                  <Text variant="bodyMd" tone="subdued">
+                    {limit !== null
+                      ? `You have synced ${products.length} out of ${limit} products allowed.`
+                      : `You have synced ${products.length} products (Unlimited sync).`}
+                  </Text>
+                </BlockStack>
+                {limit !== null && (
+                  <RouterLink to="/app/billing">Upgrade plan</RouterLink>
+                )}
+              </InlineStack>
               {limit !== null && (
-                <Link url="/app/billing" removeUnderline>
-                  Upgrade Plan
-                </Link>
+                <ProgressBar
+                  progress={Math.min(100, (products.length / limit) * 100)}
+                  tone={isLimitReached ? "critical" : "primary"}
+                />
               )}
-            </InlineStack>
-            {limit !== null && (
-              <ProgressBar
-                progress={Math.min(100, (products.length / limit) * 100)}
-                tone={isLimitReached ? "critical" : "primary"}
-              />
-            )}
-          </BlockStack>
-        </Card>
+            </BlockStack>
+          </Card>
 
-        {products.length === 0 ? (
-          <EmptyState
-            heading="No products synced yet"
-            image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-          >
-            <p>Click "Sync Products" or "Search & Add Products" to add store products.</p>
-          </EmptyState>
-        ) : (
-          <IndexTable
-            resourceName={resourceName}
-            itemCount={products.length}
-            selectedItemsCount={
-              allResourcesSelected ? "All" : selectedResources.length
-            }
-            onSelectionChange={handleSelectionChange}
-            bulkActions={[
-              {
-                content: "Remove from recommendations",
-                onAction: handleBulkDelete,
-              },
-            ]}
-            headings={[
-              { title: "Image" },
-              { title: "Product Title" },
-              { title: "Price", alignment: "end" },
-              { title: "Actions", alignment: "end" },
-            ]}
-          >
-            {rowMarkup}
-          </IndexTable>
-        )}
-      </BlockStack>
+          {products.length === 0 ? (
+            <EmptyState
+              heading="No products synced yet"
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+            >
+              <p>
+                Click "Sync Products" or "Search & Add Products" to add store
+                products.
+              </p>
+            </EmptyState>
+          ) : (
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={products.length}
+              selectedItemsCount={
+                allResourcesSelected ? "All" : selectedResources.length
+              }
+              onSelectionChange={handleSelectionChange}
+              bulkActions={[
+                {
+                  content: "Remove from recommendations",
+                  onAction: handleBulkDelete,
+                },
+              ]}
+              headings={[
+                { title: "Image" },
+                { title: "Product Title" },
+                { title: "Price", alignment: "end" },
+                { title: "Actions", alignment: "end" },
+              ]}
+            >
+              {rowMarkup}
+            </IndexTable>
+          )}
+        </BlockStack>
       </Box>
     </Page>
   );
