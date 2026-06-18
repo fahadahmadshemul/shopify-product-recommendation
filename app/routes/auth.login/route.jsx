@@ -5,6 +5,9 @@ import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
 export const loader = async ({ request }) => {
+  if (process.env.NODE_ENV === "production") {
+    throw new Response("Not Found", { status: 404 });
+  }
   const errors = loginErrorMessage(await login(request));
 
   return { errors };

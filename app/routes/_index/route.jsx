@@ -9,7 +9,7 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { showForm: Boolean(login) };
+  return { showForm: Boolean(login) && process.env.NODE_ENV !== "production" };
 };
 
 export default function App() {
@@ -42,7 +42,7 @@ export default function App() {
             <strong>Visitor Analytics.</strong> Track views, cart adds, and purchases to understand customer behavior and measure recommendation impact.
           </li>
           <li>
-            <strong>Easy Setup.</strong> Install in minutes — our theme extension automatically adds a beautiful recommendation widget to your product pages.
+            <strong>Easy Setup.</strong> Just enable the Visitor Tracker app block in your theme, and a beautiful recommendation widget appears on your product pages.
           </li>
         </ul>
       </div>

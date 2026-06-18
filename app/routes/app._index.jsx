@@ -335,6 +335,23 @@ export default function Index() {
             </Box>
           )}
 
+          {/* Theme block setup guide */}
+          <Box borderRadius="200" overflowX="hidden">
+            <Banner
+              title="Enable the recommendation widget on your storefront"
+              tone="info"
+            >
+              <p>
+                To display product recommendations on your product pages, you
+                need to enable the <strong>Visitor Tracker</strong> app block in
+                your theme. Go to{" "}
+                <strong>Online Store → Themes → Customize</strong>, then open
+                the <strong>App embeds</strong> section and toggle on{" "}
+                <strong>Visitor Tracker</strong>.
+              </p>
+            </Banner>
+          </Box>
+
           {/* Recommendation limit warning */}
           {recLimitInfo.limit !== null && recLimitInfo.remaining === 0 && (
             <Box borderRadius="200" overflowX="hidden">
