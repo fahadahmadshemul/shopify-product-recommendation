@@ -7,6 +7,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
 import { useState } from "react";
+import { NavMenu } from "@shopify/app-bridge-react";
 import { Box, Banner } from "@shopify/polaris";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -27,11 +28,12 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Home</s-link>
-        <s-link href="/app/products">Products</s-link>
-        <s-link href="/app/billing">Billing</s-link>
-      </s-app-nav>
+      <NavMenu>
+        <a href="/app">Home</a>
+        <a href="/app/products">Products</a>
+        <a href="/app/settings">Widget</a>
+        <a href="/app/billing">Billing</a>
+      </NavMenu>
       <PolarisAppProvider i18n={enTranslations}>
         {showBanner && (
           <Box paddingBlockEnd="400" paddingInline="400">

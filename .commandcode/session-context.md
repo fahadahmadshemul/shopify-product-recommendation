@@ -1,6 +1,6 @@
 # Session Context — Product Recommendation System
 
-> Full project reference. Last updated: 2026-06-15
+> Full project reference. Last updated: 2026-06-18
 
 ---
 
@@ -22,12 +22,12 @@ Shopify embedded app that injects personalized product recommendation widgets on
 
 ## Database Schema (`prisma/schema.prisma`)
 
-**6 Models:**
+**6+ Models:**
 
 | Model | Purpose | Key Fields |
 |---|---|---|
 | **Session** | Shopify OAuth sessions | `id`, `shop`, `accessToken`, `scope`, `refreshToken` |
-| **Shop** | Merchant store record | `id` (autoinc), `shop` (unique), `isActive`, `currency`, `accessToken` |
+| **Shop** | Merchant store record | `id` (autoinc), `shop` (unique), `isActive`, `currency`, `accessToken`, `widgetSettings` (JSON) |
 | **Product** | Synced product cache | `id` (gid://), `title`, `handle`, `price`, `compareAtPrice`, `imageUrl`, `firstVariantId` (numeric), `shopDomain` |
 | **VisitorActivity** | Visitor behavior events | `visitorId`, `shopDomain`, `productId`, `eventType` (view/cart/purchase), `duration` |
 | **Recommendation** | Generated recommendation log | `visitorId`, `shopDomain`, `productId`, `score` |
@@ -35,7 +35,7 @@ Shopify embedded app that injects personalized product recommendation widgets on
 
 **Indexes:** `Product(shopDomain)`, `VisitorActivity(shopDomain, productId)`, `VisitorActivity(shopDomain, visitorId)`, `Recommendation(shopDomain, createdAt)`
 
-**7 Migrations** in `prisma/migrations/`
+**8 Migrations** in `prisma/migrations/`
 
 ---
 
@@ -67,9 +67,10 @@ Shopify embedded app that injects personalized product recommendation widgets on
 ### Admin Dashboard (Embedded App)
 | Route | File | Purpose |
 |---|---|---|
-| `/app` (layout) | `app/routes/app.jsx` | Embedded shell: App Bridge, Polaris, nav (Home/Products/Billing) |
-| `/app/_index` | `app/routes/app._index.jsx` | Analytics: views/carts/purchases, CTR, top 5 products, 7-day SVG chart, limit warnings, conversion funnel |
+| `/app` (layout) | `app/routes/app.jsx` | Embedded shell: App Bridge, Polaris, nav (Home/Products/Widget/Billing) |
+| `/app/_index` | `app/routes/app._index.jsx` | Analytics: views/carts/purchases, CTR, top 5 products, 7-day SVG chart, limit warnings, conversion funnel, theme block setup banner |
 | `/app/products` | `app/routes/app.products.jsx` | Product sync/add/delete UI, IndexTable, App Bridge resource picker, plan limit bar |
+| `/app/settings` | `app/routes/app.settings.jsx` | **NEW** — Dynamic widget customization: heading text, 7 color fields, border width/radius per shop |
 | `/app/billing` | `app/routes/app.billing.jsx` | 3-column plan cards (Free/Basic/Pro), upgrade/downgrade |
 | `/app/billing/subscribe` | `app/routes/app.billing.subscribe.jsx` | Handles plan change → billing.request(), handles Free downgrade (cancel active subscription) |
 | `/app/billing/success` | `app/routes/app.billing.success.jsx` | Post-payment confirmation page |
@@ -131,7 +132,7 @@ Shopify embedded app that injects personalized product recommendation widgets on
 
 ## Storefront Widget (`extensions/visitor-tracker/assets/tracker.js`)
 
-Vanilla JS, ~530 lines. Runs on storefront product pages via theme app extension block.
+Vanilla JS, ~400 lines. Runs on storefront product pages via theme app extension block.
 
 ### Features:
 - **Visitor ID:** Generated once, stored in localStorage (`v_` + random + timestamp)
@@ -142,12 +143,13 @@ Vanilla JS, ~530 lines. Runs on storefront product pages via theme app extension
 - **Recommendation fetch:** GET `/api/recommendations` → renders widget
 
 ### Widget rendering:
-- **3 heading states:** "Recommended for You" / "Popular Products" (cold start) / "Coming Soon" (empty)
-- **Card design:** 2-col mobile, 4-col desktop grid. Image, title, price row, ATC button
-- **Sale badge:** Red badge top-left when `compareAtPrice > price`
-- **ATC button:** POSTs `/cart/add.js` with numeric variant ID. Loading spinner → "✓ Added" → tracks cart event. On success: fetches `/cart.js` to update theme cart count badges, dispatches `cart:updated` + `cart:requestRender` custom events so theme drawer components sync
-- **Dark mode:** Full `@media (prefers-color-scheme: dark)` support
-- **Currency:** Uses `Intl.NumberFormat` with `shopCurrency` from API (no hardcoded `$`)
+- **3 heading states:** "Recommended for You" / "Popular Products" (cold start) / "Coming Soon" (empty) — customizable in Widget Settings
+- **Card design:** 2-col mobile, 4-col desktop grid. Full card is `<a>` link to product page. Image, title, price row. No ATC button (avoids wrong-variant issue with multi-variant products)
+- **Sale badge:** Top-left when `compareAtPrice > price`, uses theme `--color-badge-sale-background` or custom color from widget settings
+- **Dynamic per-shop styling:** CSS injected from `data.widgetSettings` returned by API. Colors, border width/radius, heading text — all customizable from admin dashboard
+- **Theme-adaptive fallback:** When no custom settings, uses theme CSS custom properties (`--color-foreground`, `--color-background`, `--font-heading-family`, `--border-radius`, etc.) — blends with any 2.0 theme
+- **Image hover zoom:** `scale(1.03)` with theme's `--duration-long` transition
+- **Currency:** Uses `Intl.NumberFormat` with `shopCurrency` from API
 - **Smart insertion:** After `.product`, `.product-single`, `#MainContent`, or `<main>`
 
 ### GDPR Consent:
@@ -168,6 +170,7 @@ Vanilla JS, ~530 lines. Runs on storefront product pages via theme app extension
 | `app/services/shop.server.js` | `saveShopToDb()` — upserts shop record after OAuth |
 | `app/services/tenant.service.js` | `resolveTenant()` — upserts Shop, returns `{ id }` for FK use |
 | `app/services/rate-limiter.server.js` | In-memory sliding window. Per visitorId + IP. Auto-cleanup every 60s. Track: 60/min, Recs: 30/min |
+| `app/services/widget-settings.service.js` | **NEW** — `getWidgetSettings()`, `saveWidgetSettings()`, `getDefaults()`. Per-shop widget customization CRUD |
 | `app/utils/gid.js` | `extractNumericGid()` — strips Shopify GID prefix from variant IDs |
 | `app/repositories/shops.repository.js` | **Unused** — references wrong schema fields. Not wired in. |
 
@@ -231,11 +234,9 @@ Vanilla JS, ~530 lines. Runs on storefront product pages via theme app extension
    → Collaborative filtering → Event-weighted scoring + recency decay
    → Fallback → Cold start → Batch handle fetch → Log impressions → Return JSON
 
-3. Widget renders with cards, prices, sale badges, ATC buttons
+3. Widget renders with cards, prices, sale badges — entire card is product page link
 
-4. Visitor clicks ATC button
-   → stripGid() → POST /cart/add.js (numeric variant ID)
-   → On success: POST /api/track (cart) + update theme cart UI
+4. Visitor clicks card → navigates to product page (where they can select variant and add to cart)
 
 5. Visitor completes purchase (thank-you page)
    → tracker.js detects step=thank_you → POST /api/track (purchase) × each line item
@@ -272,6 +273,70 @@ Key points:
 
 ---
 
+## App Store Review Compliance (Audited 2026-06-18)
+
+✅ **16/20 checkable requirements pass**
+❌ **1 failing:** 5.1.3 Theme block setup instructions (FIXED — see below)
+⚠️ **3 need review:** 2.3.1 Manual shop domain input, 2.2.7 ResourcePicker interaction, 1.1.13 Product duplication messaging
+
+**Fixes applied for compliance:**
+- **5.1.3:** Dashboard now shows persistent info Banner explaining how to enable `Visitor Tracker` app block in the theme editor (Online Store → Themes → Customize → App Embeds → Toggle Visitor Tracker)
+- **2.3.1:** Manual myshopify.com input forms now dev-only: `_index/route.jsx` gated behind `NODE_ENV !== "production"`, `auth.login/route.jsx` returns 404 in production
+- **Hydration mismatch** on `<html>`: Added `suppressHydrationWarning` to root `<html>` element — Bitdefender Anti-Tracker injects `bis_size` attributes causing client/server mismatch
+
+---
+
+## Dynamic Widget Customization (Implemented 2026-06-18)
+
+Per-shop customizable recommendation widget. Merchants can change colors, text, and dimensions from the admin dashboard — reflected instantly on their storefront.
+
+### Database
+- **`Shop.widgetSettings`** — `TEXT NOT NULL DEFAULT '{}'` JSON column. Stores per-shop customization. Migration: `20260618060318_add_widget_settings`
+
+### Service Layer (`app/services/widget-settings.service.js`)
+- `getWidgetSettings(shopDomain)` — fetches from DB, merges with defaults, returns settings object
+- `saveWidgetSettings(shopDomain, settings)` — cleans null/empty values, saves JSON to DB
+- `getDefaults()` — returns factory default settings
+
+### Dashboard UI (`/app/settings`, `app/routes/app.settings.jsx`)
+Navigation link "Widget" added to `<s-app-nav>` in `app/routes/app.jsx`.
+
+Settings page with 3 sections:
+1. **Heading Text** — Personalized heading, Cold start heading, Empty state heading (TextField inputs)
+2. **Colors** — 7 color fields: Background, Card bg, Border, Heading, Title, Price, Sale badge. Each has a hex text input + native color picker. Uses `useSubmit()` + manual `FormData` (not `<fetcher.Form>`) to avoid controlled-input DOM lag issues.
+3. **Dimensions** — Border width (0-10px), Border radius (0-30px)
+
+Save + Reset buttons. Reset clears all custom values (reverts to theme defaults).
+
+**Critical fix:** `widget-settings.service.js` imports `db.server.js` (Prisma). To prevent server-only code from leaking into client bundle, service imports use `await import()` inside `loader`/`action` only. Same for `resolveTenant`. `DEFAULTS` constant inlined in page file to avoid DB import chain.
+
+### API (`/api/recommendations`)
+Response now includes `widgetSettings` object fetched via `getWidgetSettings(shopDomain)`.
+
+### Tracker.js Changes
+CSS now dynamically computed from `data.widgetSettings`:
+- `backgroundColor`, `cardBackgroundColor`, `borderColor` — if custom, use hex; else fallback to theme CSS vars
+- `headingColor`, `titleColor`, `priceColor` — custom or theme default
+- `saleBadgeColor` — custom or Dawn badge color
+- `borderWidth`, `borderRadius` — custom px values or theme variables
+- `comparePrice` color — derived from price color with `88` opacity suffix
+- Shadow color — derived from border color with `22` suffix
+- Heading text — `heading`, `coldStartHeading`, `emptyHeading` from widgetSettings
+
+### Widget Design (Final — 2026-06-18)
+Following international e-commerce standards and Dawn theme patterns (per taste requirement):
+- **Visible container card** — `.shopify-recs-wrapper` with background, border, shadow using theme CSS variables
+- **Individual product cards** — `::after` pseudo-element for border + shadow (Dawn pattern), image hover zoom `scale(1.03)`
+- **Theme-adaptive via CSS custom properties** — `--color-foreground`, `--color-background`, `--font-heading-scale`, `--font-heading-family`, `--font-body-family`, `--border-radius`, `--border-width`, `--border-opacity`, `--shadow-*`, `--color-badge-sale-background`, `--color-badge-sale-text`
+- **ATC button REMOVED** — entire card is a link to the product page. Reason: variant-only ATC without variant selector risks wrong variant being added. Shopify's own recommendation apps and Amazon both use product page links, not ATC buttons.
+
+### GDPR Consent
+- Removed `stripGid()` function (no longer needed without ATC button)
+- Removed `variantId` variable from card HTML generation
+- Consent banner, tracking gate, opt-out — all intact
+
+---
+
 ## Key Architectural Decisions
 
 - **SQLite** — single-file DB, no separate DB server needed. Enforces tenant isolation via WHERE clauses
@@ -282,6 +347,9 @@ Key points:
 - **Fire-and-forget sync** — product sync from Shopify happens in background, doesn't block API responses
 - **Numeric variant IDs** — all `firstVariantId` stored as plain numeric string (GID stripped at storage time)
 - **No extracted components** — all Polaris UI code inline in route files (components/ dirs exist but empty)
+- **Per-shop widget JSON** — `Shop.widgetSettings` column stores customization as JSON. Service layer merges with defaults. API returns settings alongside recommendations. Tracker.js injects dynamic CSS.
+- **Server-only imports** — services that import `db.server.js` (Prisma) use `await import()` inside loader/action only to prevent client bundle leakage
+- **Product page links, not ATC** — Card is full `<a>` link. No ATC button to avoid wrong-variant risk with multi-variant products. Matches Shopify's own recommendation patterns
 
 ---
 

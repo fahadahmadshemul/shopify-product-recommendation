@@ -2,7 +2,20 @@ import { useLoaderData, useRouteError, Link as RouterLink } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { Card, Text, BlockStack, Box, InlineGrid, Layout, InlineStack, Badge, Thumbnail, Divider, ProgressBar, Banner } from "@shopify/polaris";
+import {
+  Card,
+  Text,
+  BlockStack,
+  Box,
+  InlineGrid,
+  Layout,
+  InlineStack,
+  Badge,
+  Thumbnail,
+  Divider,
+  ProgressBar,
+  Banner,
+} from "@shopify/polaris";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 
 export const loader = async ({ request }) => {
@@ -26,14 +39,17 @@ export const loader = async ({ request }) => {
       where: { shopDomain: session.shop, eventType: "view" },
     }),
     db.visitorActivity.count({
-      where: { shopDomain: session.shop, eventType: { in: ["cart", "add_to_cart"] } },
+      where: {
+        shopDomain: session.shop,
+        eventType: { in: ["cart", "add_to_cart"] },
+      },
     }),
     db.visitorActivity.count({
       where: { shopDomain: session.shop, eventType: "purchase" },
     }),
     db.visitorActivity.findMany({
       where: { shopDomain: session.shop, eventType: "purchase" },
-      select: { visitorId: true, productId: true },
+      select: { visitorId: true, productId: true, price: true },
     }),
     db.recommendation.findMany({
       where: { shopDomain: session.shop },
@@ -57,33 +73,44 @@ export const loader = async ({ request }) => {
       where: { shop: { shop: session.shop }, status: "ACTIVE" },
       select: { trialEndsAt: true },
     }),
-    db.visitorActivity.groupBy({
-      by: ["visitorId"],
-      where: { shopDomain: session.shop },
-      _count: { visitorId: true },
-    }).then((rows) => rows.length),
-    db.visitorActivity.aggregate({
-      where: { shopDomain: session.shop, duration: { not: null } },
-      _avg: { duration: true },
-    }).then((agg) => Math.round(agg._avg.duration || 0)),
+    db.visitorActivity
+      .groupBy({
+        by: ["visitorId"],
+        where: { shopDomain: session.shop },
+        _count: { visitorId: true },
+      })
+      .then((rows) => rows.length),
+    db.visitorActivity
+      .aggregate({
+        where: { shopDomain: session.shop, duration: { not: null } },
+        _avg: { duration: true },
+      })
+      .then((agg) => Math.round(agg._avg.duration || 0)),
   ]);
 
   // Phase 2 — dependent calculations using Phase 1 results, run in parallel
-  const [
-    { recViews, recPurchasesFromDB },
-    impactRecs,
-  ] = await Promise.all([
+  const [{ recViews, recPurchasesFromDB }, impactRecs] = await Promise.all([
     (async () => {
       if (allRecs.length === 0) return { recViews: [], recPurchasesFromDB: [] };
       const recVisitorIds = [...new Set(allRecs.map((r) => r.visitorId))];
       const recProductIds = [...new Set(allRecs.map((r) => r.productId))];
       const [views, purchasesFromDb] = await Promise.all([
         db.visitorActivity.findMany({
-          where: { shopDomain: session.shop, eventType: "view", visitorId: { in: recVisitorIds }, productId: { in: recProductIds } },
+          where: {
+            shopDomain: session.shop,
+            eventType: "view",
+            visitorId: { in: recVisitorIds },
+            productId: { in: recProductIds },
+          },
           select: { visitorId: true, productId: true },
         }),
         db.visitorActivity.findMany({
-          where: { shopDomain: session.shop, eventType: "purchase", visitorId: { in: recVisitorIds }, productId: { in: recProductIds } },
+          where: {
+            shopDomain: session.shop,
+            eventType: "purchase",
+            visitorId: { in: recVisitorIds },
+            productId: { in: recProductIds },
+          },
           select: { visitorId: true, productId: true },
         }),
       ]);
@@ -94,7 +121,11 @@ export const loader = async ({ request }) => {
       const visitorIds = [...new Set(purchases.map((p) => p.visitorId))];
       const productIds = [...new Set(purchases.map((p) => p.productId))];
       return db.recommendation.findMany({
-        where: { shopDomain: session.shop, visitorId: { in: visitorIds }, productId: { in: productIds } },
+        where: {
+          shopDomain: session.shop,
+          visitorId: { in: visitorIds },
+          productId: { in: productIds },
+        },
         select: { visitorId: true, productId: true },
       });
     })(),
@@ -102,13 +133,13 @@ export const loader = async ({ request }) => {
 
   // Phase 3 — compute metrics from results
   const conversionRate = Math.round(
-    totalPurchases > 0 ? (totalPurchases / totalViews) * 100 : 0
+    totalPurchases > 0 ? (totalPurchases / totalViews) * 100 : 0,
   );
 
   let recommendationImpactScore = 0;
   if (purchases.length > 0) {
     const recSet = new Set(
-      impactRecs.map((r) => `${r.visitorId}_${r.productId}`)
+      impactRecs.map((r) => `${r.visitorId}_${r.productId}`),
     );
     let recommendedPurchases = 0;
     for (const purchase of purchases) {
@@ -117,14 +148,14 @@ export const loader = async ({ request }) => {
       }
     }
     recommendationImpactScore = Math.round(
-      (recommendedPurchases / purchases.length) * 100
+      (recommendedPurchases / purchases.length) * 100,
     );
   }
 
   const totalRecsGenerated = allRecs.length;
 
   const recLookupSet = new Set(
-    allRecs.map((r) => `${r.visitorId}_${r.productId}`)
+    allRecs.map((r) => `${r.visitorId}_${r.productId}`),
   );
 
   const clickedRecs = new Set();
@@ -134,9 +165,10 @@ export const loader = async ({ request }) => {
       clickedRecs.add(key);
     }
   }
-  const recCTR = totalRecsGenerated > 0
-    ? Math.round((clickedRecs.size / totalRecsGenerated) * 100)
-    : 0;
+  const recCTR =
+    totalRecsGenerated > 0
+      ? Math.round((clickedRecs.size / totalRecsGenerated) * 100)
+      : 0;
 
   const purchasedRecs = new Set();
   for (const p of recPurchasesFromDB) {
@@ -146,9 +178,10 @@ export const loader = async ({ request }) => {
     }
   }
   const totalRecPurchases = purchasedRecs.size;
-  const recConversionRate = clickedRecs.size > 0
-    ? Math.round((totalRecPurchases / clickedRecs.size) * 100)
-    : 0;
+  const recConversionRate =
+    clickedRecs.size > 0
+      ? Math.round((totalRecPurchases / clickedRecs.size) * 100)
+      : 0;
 
   const productStatsMap = new Map();
   for (const rec of allRecs) {
@@ -193,10 +226,17 @@ export const loader = async ({ request }) => {
   const topProducts = Array.from(productStatsMap.values())
     .map((stat) => ({
       ...stat,
-      title: productTitleMap.get(stat.productId) || stat.productId.replace("gid://shopify/Product/", ""),
+      title:
+        productTitleMap.get(stat.productId) ||
+        stat.productId.replace("gid://shopify/Product/", ""),
       imageUrl: productImageMap.get(stat.productId) || null,
     }))
-    .sort((a, b) => b.purchases - a.purchases || b.clicks - a.clicks || b.impressions - a.impressions)
+    .sort(
+      (a, b) =>
+        b.purchases - a.purchases ||
+        b.clicks - a.clicks ||
+        b.impressions - a.impressions,
+    )
     .slice(0, 5);
 
   const dailyDataMap = {};
@@ -221,6 +261,19 @@ export const loader = async ({ request }) => {
 
   const chartData = Object.values(dailyDataMap);
 
+  // Calculate actual average order value from stored purchase prices
+  const purchasePrices = purchases
+    .map((p) => p.price)
+    .filter((p) => p !== null && p !== undefined);
+  const avgOrderValue =
+    purchasePrices.length > 0
+      ? Math.round(
+          (purchasePrices.reduce((sum, p) => sum + p, 0) /
+            purchasePrices.length) *
+            100,
+        ) / 100
+      : 0;
+
   return {
     totalViews,
     totalAddToCart,
@@ -236,6 +289,7 @@ export const loader = async ({ request }) => {
     trialEndsAt: trialEndsAt?.trialEndsAt || null,
     uniqueVisitors,
     avgDuration,
+    avgOrderValue,
   };
 };
 
@@ -255,6 +309,7 @@ export default function Index() {
     trialEndsAt,
     uniqueVisitors,
     avgDuration,
+    avgOrderValue,
   } = useLoaderData();
 
   const isInTrial = trialEndsAt && new Date(trialEndsAt) > new Date();
@@ -264,13 +319,17 @@ export default function Index() {
   const analyticsEnabled = recLimitInfo.planKey === "PRO";
 
   // Helper functions for SVG chart plotting
-  const maxVal = Math.max(...chartData.map((d) => Math.max(d.views, d.purchases)), 5);
+  const maxVal = Math.max(
+    ...chartData.map((d) => Math.max(d.views, d.purchases)),
+    5,
+  );
   const chartHeight = 130;
   const chartWidth = 460;
   const paddingLeft = 30;
   const paddingTop = 15;
 
-  const getX = (index) => paddingLeft + (index * (chartWidth - paddingLeft - 15)) / 6;
+  const getX = (index) =>
+    paddingLeft + (index * (chartWidth - paddingLeft - 15)) / 6;
   const getY = (val) => chartHeight + paddingTop - (val / maxVal) * chartHeight;
 
   const getViewsAreaPath = () => {
@@ -296,14 +355,20 @@ export default function Index() {
   const getViewsLinePath = () => {
     if (chartData.length === 0) return "";
     return chartData
-      .map((day, idx) => `${idx === 0 ? "M" : "L"} ${getX(idx)} ${getY(day.views)}`)
+      .map(
+        (day, idx) =>
+          `${idx === 0 ? "M" : "L"} ${getX(idx)} ${getY(day.views)}`,
+      )
       .join(" ");
   };
 
   const getPurchasesLinePath = () => {
     if (chartData.length === 0) return "";
     return chartData
-      .map((day, idx) => `${idx === 0 ? "M" : "L"} ${getX(idx)} ${getY(day.purchases)}`)
+      .map(
+        (day, idx) =>
+          `${idx === 0 ? "M" : "L"} ${getX(idx)} ${getY(day.purchases)}`,
+      )
       .join(" ");
   };
 
@@ -530,7 +595,14 @@ export default function Index() {
                         Est. Revenue
                       </Text>
                       <Text as="p" variant="heading3xl" fontWeight="bold">
-                        ${(totalPurchases * 29.99).toLocaleString()}
+                        {(totalPurchases * avgOrderValue).toLocaleString(
+                          "en-US",
+                          {
+                            style: "currency",
+                            currency: "USD",
+                            minimumFractionDigits: 2,
+                          },
+                        )}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         Based on avg. order value

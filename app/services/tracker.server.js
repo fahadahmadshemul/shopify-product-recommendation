@@ -1,6 +1,6 @@
 import db from "../db.server";
 
-export async function saveActivity({ visitorId, shopDomain, productId, eventType, duration }) {
+export async function saveActivity({ visitorId, shopDomain, productId, eventType, duration, price }) {
   return await db.visitorActivity.create({
     data: {
       visitorId,
@@ -8,6 +8,7 @@ export async function saveActivity({ visitorId, shopDomain, productId, eventType
       productId,
       eventType, //"view", "cart", "purchase"
       duration: duration ?? null,
+      price: price ?? null,
     },
   });
 }

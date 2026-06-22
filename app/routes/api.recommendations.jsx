@@ -2,6 +2,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 import { checkRateLimit } from "../services/rate-limiter.server";
+import { getWidgetSettings } from "../services/widget-settings.service";
 
 // CORS headers for preflight request routing
 const corsHeaders = {
@@ -270,6 +271,7 @@ export const loader = async ({ request }) => {
           limit: limitCheck.limit,
           planName: limitCheck.planName,
         },
+        widgetSettings: await getWidgetSettings(shopDomain),
       },
       { headers: corsHeaders }
     );

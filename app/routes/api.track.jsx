@@ -109,7 +109,7 @@ export const action = async ({ request }) => {
     }
 
     const body = await request.json();
-    const { visitorId, productId, eventType, duration } = body;
+    const { visitorId, productId, eventType, duration, price } = body;
 
     if (!visitorId || !productId || !eventType) {
       return Response.json(
@@ -144,6 +144,7 @@ export const action = async ({ request }) => {
       productId,
       eventType,
       duration,
+      price: eventType === "purchase" ? (price ?? null) : null,
     });
 
     return Response.json({ success: true }, { headers: corsHeaders });

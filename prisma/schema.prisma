@@ -35,15 +35,16 @@ model Session {
 
 //create shop table
 model Shop {
-  id            Int                   @id @default(autoincrement())
-  shop          String                @unique
-  subscriptions BillingSubscription[]
-  accessToken   String
-  scope         String
-  isActive      Boolean               @default(true)
-  currency      String                @default("USD")
-  installedAt   DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id             Int                   @id @default(autoincrement())
+  shop           String                @unique
+  subscriptions  BillingSubscription[]
+  accessToken    String
+  scope          String
+  isActive       Boolean               @default(true)
+  currency       String                @default("USD")
+  installedAt    DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  widgetSettings String                @default("{}")
 }
 
 // Phase 1 — Products cache table
@@ -70,6 +71,7 @@ model VisitorActivity {
   productId  String
   eventType  String // "view", "cart", "purchase"
   duration   Int? // how many seconds
+  price      Float? // unit price at time of event (for purchase events)
   createdAt  DateTime @default(now())
 
   @@index([shopDomain, productId])
