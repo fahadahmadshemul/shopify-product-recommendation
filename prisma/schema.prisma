@@ -57,6 +57,7 @@ model Product {
   compareAtPrice   Float?
   imageUrl         String?
   firstVariantId   String?
+  hasSingleVariant Boolean  @default(true)
   shopDomain       String
   // Availability fields — null means "not yet synced"; treated as available/ACTIVE for backward compat
   totalInventory   Int?     // Shopify total inventory across all locations

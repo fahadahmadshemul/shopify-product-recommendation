@@ -243,6 +243,119 @@ describe("Products Synchronization Pagination", () => {
     });
   });
 
+  describe("mapProductNode — hasSingleVariant field", () => {
+    it("persists hasSingleVariant=true when Shopify reports only a default variant", async () => {
+      const page1Response = {
+        json: () => Promise.resolve({
+          data: {
+            products: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              edges: [
+                {
+                  node: {
+                    id: "gid://shopify/Product/77",
+                    title: "Single Variant Product",
+                    handle: "single-variant",
+                    status: "ACTIVE",
+                    totalInventory: 5,
+                    hasOnlyDefaultVariant: true,
+                    priceRangeV2: { minVariantPrice: { amount: "7.00" } },
+                    variants: { edges: [{ node: { id: "gid://shopify/ProductVariant/77" } }] },
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      };
+      mockAdmin.graphql.mockResolvedValue(page1Response);
+
+      let capturedCreate;
+      db.product.upsert.mockImplementation(({ create }) => {
+        capturedCreate = create;
+        return Promise.resolve(create);
+      });
+
+      await syncProducts(null);
+
+      expect(capturedCreate.hasSingleVariant).toBe(true);
+      expect(capturedCreate.firstVariantId).toBe("77");
+    });
+
+    it("persists hasSingleVariant=false when Shopify reports multiple variants", async () => {
+      const page1Response = {
+        json: () => Promise.resolve({
+          data: {
+            products: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              edges: [
+                {
+                  node: {
+                    id: "gid://shopify/Product/66",
+                    title: "Multi Variant Product",
+                    handle: "multi-variant",
+                    status: "ACTIVE",
+                    totalInventory: 12,
+                    hasOnlyDefaultVariant: false,
+                    priceRangeV2: { minVariantPrice: { amount: "12.00" } },
+                    variants: { edges: [{ node: { id: "gid://shopify/ProductVariant/66" } }] },
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      };
+      mockAdmin.graphql.mockResolvedValue(page1Response);
+
+      let capturedCreate;
+      db.product.upsert.mockImplementation(({ create }) => {
+        capturedCreate = create;
+        return Promise.resolve(create);
+      });
+
+      await syncProducts(null);
+
+      expect(capturedCreate.hasSingleVariant).toBe(false);
+    });
+
+    it("defaults hasSingleVariant to true when Shopify omits the field (backward compat)", async () => {
+      const page1Response = {
+        json: () => Promise.resolve({
+          data: {
+            products: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              edges: [
+                {
+                  node: {
+                    id: "gid://shopify/Product/55",
+                    title: "Legacy Product",
+                    handle: "legacy",
+                    status: "ACTIVE",
+                    totalInventory: 8,
+                    priceRangeV2: { minVariantPrice: { amount: "3.00" } },
+                    variants: { edges: [{ node: { id: "gid://shopify/ProductVariant/55" } }] },
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      };
+      mockAdmin.graphql.mockResolvedValue(page1Response);
+
+      let capturedCreate;
+      db.product.upsert.mockImplementation(({ create }) => {
+        capturedCreate = create;
+        return Promise.resolve(create);
+      });
+
+      await syncProducts(null);
+
+      expect(capturedCreate.hasSingleVariant).toBe(true);
+    });
+  });
+
   describe("mapProductNode — new availability fields", () => {
     it("persists status and totalInventory when Shopify provides them", async () => {
       const page1Response = {

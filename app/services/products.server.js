@@ -22,6 +22,7 @@ const PRODUCTS_QUERY = `#graphql
           handle
           status
           totalInventory
+          hasOnlyDefaultVariant
           priceRangeV2 {
             minVariantPrice {
               amount
@@ -65,6 +66,7 @@ function mapProductNode(node, shopDomain) {
     compareAtPrice,
     imageUrl: node.featuredImage ? node.featuredImage.url : null,
     firstVariantId,
+    hasSingleVariant: node.hasOnlyDefaultVariant ?? true,
     shopDomain,
     // Availability — null if Shopify doesn't return the field (backward compat: treated as available)
     status: node.status ?? null,

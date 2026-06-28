@@ -45,6 +45,7 @@ async function syncProductInBackground(admin, productId, shopDomain, productLimi
         product(id: $id) {
           title
           handle
+          hasOnlyDefaultVariant
           priceRangeV2 {
             minVariantPrice {
               amount
@@ -81,6 +82,7 @@ async function syncProductInBackground(admin, productId, shopDomain, productLimi
       const imageUrl = productData.featuredImage ? productData.featuredImage.url : null;
       const variants = productData.variants?.edges || [];
       const firstVariantId = extractNumericGid(variants.length > 0 ? variants[0].node.id : null);
+      const hasSingleVariant = productData.hasOnlyDefaultVariant ?? true;
 
       // 3. Use upsert instead of create to handle the race condition where two concurrent
       //    requests for the same new product both pass the findUnique miss and both try to
@@ -96,6 +98,7 @@ async function syncProductInBackground(admin, productId, shopDomain, productLimi
           compareAtPrice,
           imageUrl,
           firstVariantId,
+          hasSingleVariant,
           shopDomain,
         },
         update: {
@@ -105,6 +108,7 @@ async function syncProductInBackground(admin, productId, shopDomain, productLimi
           compareAtPrice,
           imageUrl,
           firstVariantId,
+          hasSingleVariant,
         },
       });
       console.log(`Auto-synced missing product: ${productId}`);

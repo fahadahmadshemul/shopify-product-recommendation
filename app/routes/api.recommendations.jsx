@@ -11,6 +11,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+/**
+ * Shared availability check used by recommendation filters AND the Quick Add eligibility flag.
+ * A product is treated as available when:
+ *   - totalInventory is null (not yet synced) OR > 0
+ *   - status is null (not yet synced) OR "ACTIVE"
+ */
+function isProductAvailable(product) {
+  const hasInventory = product.totalInventory === null || product.totalInventory > 0;
+  const isActiveStatus = product.status === null || product.status === "ACTIVE";
+  return hasInventory && isActiveStatus;
+}
+
 export const loader = async ({ request }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -255,10 +267,19 @@ export const loader = async ({ request }) => {
       .map((rec) => {
         const prod = productMap.get(rec.id);
         if (!prod) return null;
-        return {
+
+        const canQuickAdd = isProductAvailable(prod) && prod.hasSingleVariant === true;
+        const result = {
           ...prod,
           score: rec.score,
+          canQuickAdd,
         };
+
+        if (canQuickAdd) {
+          result.variantId = prod.firstVariantId;
+        }
+
+        return result;
       })
       .filter(Boolean);
 
