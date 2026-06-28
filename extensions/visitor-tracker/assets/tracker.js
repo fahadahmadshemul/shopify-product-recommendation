@@ -157,10 +157,11 @@
     track("view", pid, duration);
   });
 
-  // 5. Add-to-cart click tracking
+  // 5. Add-to-cart click tracking (main product form only, not recommendation widget buttons)
   document.addEventListener("click", (e) => {
     const btn = e.target.closest('[name="add"], .add-to-cart, #AddToCart, .product-form__submit');
-    if (btn) {
+    // Ignore clicks inside our recommendation widget — those are handled by handleQuickAdd.
+    if (btn && !btn.closest('#shopify-recommendations-widget')) {
       track("cart", pid);
       // Refresh cart attribute with visitorId for webhook tracking
       fetch('/cart/update.js', {
@@ -180,6 +181,161 @@
       }
     })
     .catch((err) => console.error("Error loading recommendations:", err));
+
+  // --- Quick Add helpers -----------------------------------------------------
+
+  /**
+   * Best-effort cart-count sync across common Shopify theme conventions.
+   * There is no universal selector that works on every custom theme, so we
+   * defensively try the most widely-used classes/IDs and dispatch generic
+   * events as a fallback. The inline "Added ✓" feedback is the guaranteed UX.
+   */
+  function refreshCartCount() {
+    fetch('/cart.js')
+      .then(function (res) { return res.json(); })
+      .then(function (cart) {
+        // Widely-used selectors across Shopify official + popular premium themes.
+        // Dawn/Refresh/Minimal/Taste/Craft/Sense: .cart-count-bubble
+        // Debut/Brooklyn/Narrative/Simple/Boundless/Venture: #CartCount
+        // Prestige/Warehouse/Motion/Streamline/Label: .header__cart-count
+        // Impulse: .cart-link__bubble
+        // Symmetry/Editions/Grid/Icon/Responsive/Venue/Canopy: .cart-count
+        // District/Pacific/Startup/Retina: .site-header__cart-count
+        // Common custom conventions: [data-cart-count], .js-cart-count, .cart-badge, .cart-quantity
+        var selectors = [
+          '.cart-count-bubble',
+          '.cart-count',
+          '#CartCount',
+          '.header__cart-count',
+          '.cart-link__bubble',
+          '.site-header__cart-count',
+          '.js-cart-count',
+          '[data-cart-count]',
+          '.cart-badge',
+          '.cart-quantity'
+        ];
+
+        selectors.forEach(function (selector) {
+          var elements = document.querySelectorAll(selector);
+          elements.forEach(function (el) {
+            // Update visible count text. We preserve child <span> structure for
+            // accessibility where possible, but if the element only contains a
+            // number we overwrite it directly.
+            var textNode = el.querySelector('[aria-hidden="true"]') || el;
+            if (textNode === el && /\d/.test(el.textContent)) {
+              el.textContent = String(cart.item_count);
+            } else if (textNode !== el) {
+              textNode.textContent = String(cart.item_count);
+            } else {
+              el.textContent = String(cart.item_count);
+            }
+
+            // Unhide elements that themes commonly hide when the cart is empty.
+            el.classList.remove('hide', 'hidden', 'd-none', 'visually-hidden');
+          });
+        });
+
+        // Generic events for themes that subscribe to custom cart updates.
+        document.dispatchEvent(new CustomEvent('cart:refresh', { detail: cart }));
+        document.dispatchEvent(new CustomEvent('cart:updated', { detail: cart }));
+      })
+      .catch(function (err) {
+        console.error('Visitor tracker: failed to refresh cart count:', err);
+      });
+  }
+
+  /**
+   * Add a single variant to the cart. This is the only ATC path for the
+   * recommendation widget. It handles numeric conversion, inline feedback,
+   * cart-count refresh, and temporary disablement while the request is in flight.
+   */
+  function addVariantToCart(variantId, button, handle) {
+    if (button.disabled) return;
+
+    var originalText = button.textContent;
+    button.disabled = true;
+    button.classList.add('loading');
+    button.textContent = 'Adding...';
+
+    function finish(success, message) {
+      button.classList.remove('loading');
+      button.textContent = message;
+
+      if (success) {
+        button.classList.add('added');
+        refreshCartCount();
+      } else {
+        button.classList.add('error');
+      }
+
+      setTimeout(function () {
+        button.textContent = originalText;
+        button.classList.remove('added', 'error');
+        button.disabled = false;
+      }, 2000);
+    }
+
+    function doAdd(id) {
+      var numericVariantId = parseInt(id, 10);
+      if (!numericVariantId || isNaN(numericVariantId)) {
+        console.error('Visitor tracker: invalid variantId for add to cart:', id);
+        finish(false, 'Try Again');
+        return;
+      }
+
+      fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: numericVariantId, quantity: 1 })
+      })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.json().then(function (err) {
+              throw new Error(err.description || err.message || 'Add to cart failed');
+            }).catch(function () {
+              throw new Error('Add to cart failed');
+            });
+          }
+          return res.json();
+        })
+        .then(function () {
+          finish(true, 'Added ✓');
+        })
+        .catch(function (err) {
+          console.error('Visitor tracker: add to cart failed:', err);
+          finish(false, 'Try Again');
+        });
+    }
+
+    // Robust fallback: if we don't have a usable variant ID, fetch the product
+    // .js endpoint and use its first variant. Shopify's /products/{handle}.js
+    // returns variants[0].id as a plain numeric string.
+    if (!variantId || variantId === 'undefined' || variantId === 'null' || variantId === '') {
+      if (!handle) {
+        console.error('Visitor tracker: no variantId and no handle for add to cart');
+        finish(false, 'Try Again');
+        return;
+      }
+
+      fetch('/products/' + encodeURIComponent(handle) + '.js')
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to fetch product details');
+          return res.json();
+        })
+        .then(function (product) {
+          var fallbackId = product && product.variants && product.variants[0] && product.variants[0].id;
+          if (!fallbackId) throw new Error('No variants found for product');
+          doAdd(fallbackId);
+        })
+        .catch(function (err) {
+          console.error('Visitor tracker: variant fallback failed:', err);
+          finish(false, 'Try Again');
+        });
+      return;
+    }
+
+    doAdd(variantId);
+  }
 
   // 7. Render widget function
   function renderRecommendations(data) {
@@ -329,6 +485,7 @@
         object-fit: cover;
         transition: transform var(--duration-long, 0.4s) ease;
       }
+      .shopify-recs-card-link:hover .shopify-recs-image,
       .shopify-recs-card:hover .shopify-recs-image {
         transform: scale(1.03);
       }
@@ -369,6 +526,13 @@
         overflow: hidden;
         text-decoration: none;
       }
+      .shopify-recs-card-link,
+      .shopify-recs-product-title-link {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+      }
+      .shopify-recs-product-title-link:hover .shopify-recs-product-title,
       .shopify-recs-card:hover .shopify-recs-product-title {
         text-decoration: underline;
         text-underline-offset: 0.3rem;
@@ -392,6 +556,34 @@
         text-decoration: line-through;
         font-weight: 400;
       }
+      .shopify-recs-variant-select {
+        width: 100%;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(var(--color-foreground, 0 0 0), 0.2);
+        font-size: 1.3rem;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .shopify-recs-atc-btn {
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px;
+        background: #008060;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 1.4rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      .shopify-recs-atc-btn:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
       .shopify-recs-empty-message {
         text-align: center;
         padding: 30px 16px;
@@ -406,7 +598,7 @@
     // Build Cards HTML
     const cardsHtml = displayRecommendations.length > 0
       ? displayRecommendations
-        .map((rec) => {
+        .map((rec, index) => {
           const imageSrc = rec.imageUrl || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F4F4F4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%23999999'>No Image</text></svg>`;
           const productUrl = `/products/${rec.handle}`;
           const hasSale = rec.compareAtPrice && rec.compareAtPrice > rec.price;
@@ -416,20 +608,56 @@
           const comparePriceHtml = hasSale
             ? '<span class="shopify-recs-compare-price">' + formatPrice(Number(rec.compareAtPrice)) + '</span>'
             : "";
+
+          // Variant resolution for rendering.
+          // The actual variant ID used at click time is always read from
+          // data-selected-variant; if it is empty, the click handler fetches
+          // /products/{handle}.js as a fallback. This makes the button work even
+          // when the API did not return live variant data.
+          const variants = Array.isArray(rec.variants) ? rec.variants : [];
+          const isMultiVariant = variants.length > 1;
+
+          const availableVariants = variants.filter((v) => v.available !== false);
+          const defaultVariant = availableVariants[0] || variants[0];
+          const defaultVariantId = defaultVariant ? String(defaultVariant.numericId) : "";
+
+          let variantSelectorHtml = "";
+          if (isMultiVariant) {
+            const optionsHtml = variants.map((v) => {
+              const numericId = String(v.numericId);
+              const isAvailable = v.available !== false;
+              const label = escapeHtml(v.title) + " — " + formatPrice(Number(v.price)) + (isAvailable ? "" : " (Unavailable)");
+              const selected = numericId === defaultVariantId ? " selected" : "";
+              const disabled = isAvailable ? "" : " disabled";
+              return `<option value="${numericId}"${selected}${disabled}>${label}</option>`;
+            }).join("");
+            variantSelectorHtml = `<select class="shopify-recs-variant-select" data-card-id="${index}">${optionsHtml}</select>`;
+          }
+
+          // ALWAYS render the button without a disabled attribute. It is only
+          // temporarily disabled inside the click handler while the request is in flight.
+          const atcButtonHtml = `<button type="button" class="shopify-recs-atc-btn" data-card-id="${index}">Add to Cart</button>`;
+
           return `
-          <a href="${escapeHtml(productUrl)}" class="shopify-recs-card" data-rec-id="${escapeHtml(rec.id)}">
-            <div class="shopify-recs-image-wrapper">
-              ${saleBadge}
-              <img src="${imageSrc}" alt="${escapeHtml(rec.title)}" class="shopify-recs-image" loading="lazy" />
-            </div>
+          <div class="shopify-recs-card" data-rec-id="${escapeHtml(rec.id)}" data-handle="${escapeHtml(rec.handle)}" data-selected-variant="${escapeHtml(defaultVariantId)}">
+            <a href="${escapeHtml(productUrl)}" class="shopify-recs-card-link">
+              <div class="shopify-recs-image-wrapper">
+                ${saleBadge}
+                <img src="${imageSrc}" alt="${escapeHtml(rec.title)}" class="shopify-recs-image" loading="lazy" />
+              </div>
+            </a>
             <div class="shopify-recs-info">
-              <h4 class="shopify-recs-product-title">${escapeHtml(rec.title)}</h4>
+              <a href="${escapeHtml(productUrl)}" class="shopify-recs-product-title-link">
+                <h4 class="shopify-recs-product-title">${escapeHtml(rec.title)}</h4>
+              </a>
               <div class="shopify-recs-price-row">
                 <span class="shopify-recs-price">${formatPrice(Number(rec.price))}</span>
                 ${comparePriceHtml}
               </div>
+              ${variantSelectorHtml}
+              ${atcButtonHtml}
             </div>
-          </a>
+          </div>
         `;
         })
         .join("")
@@ -475,6 +703,31 @@
       // Fallback
       document.body.appendChild(widgetContainer);
     }
+
+    // Attach variant selector + Add to Cart listeners AFTER the widget is in the DOM.
+    // The order is: build HTML → set innerHTML → insert into DOM → attach listeners.
+    widgetContainer.querySelectorAll('.shopify-recs-variant-select').forEach(function (select) {
+      select.addEventListener('change', function () {
+        var card = select.closest('.shopify-recs-card');
+        if (card) {
+          card.setAttribute('data-selected-variant', select.value);
+        }
+      });
+    });
+
+    widgetContainer.querySelectorAll('.shopify-recs-atc-btn').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        // Don't let the click bubble up to the product card link.
+        event.stopPropagation();
+
+        var card = button.closest('.shopify-recs-card');
+        if (!card) return;
+
+        var variantId = card.getAttribute('data-selected-variant');
+        var handle = card.getAttribute('data-handle');
+        addVariantToCart(variantId, button, handle);
+      });
+    });
   }
 
   function escapeHtml(str) {

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import PropTypes from "prop-types";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useFetcher, useRouteError } from "react-router";
 import {
@@ -57,6 +58,21 @@ function formatPrice(amount) {
 }
 
 function PlanCard({ plan, isActive, isFeatured, actionUrl }) {
+  PlanCard.propTypes = {
+    plan: PropTypes.shape({
+      name: PropTypes.string.isRequired,
+      description: PropTypes.string.isRequired,
+      amount: PropTypes.number.isRequired,
+      currencyCode: PropTypes.string.isRequired,
+      trialDays: PropTypes.number.isRequired,
+      features: PropTypes.arrayOf(PropTypes.string).isRequired,
+      key: PropTypes.string.isRequired,
+    }).isRequired,
+    isActive: PropTypes.bool.isRequired,
+    isFeatured: PropTypes.bool.isRequired,
+    actionUrl: PropTypes.string.isRequired,
+  };
+
   const fetcher = useFetcher();
 
   useEffect(() => {

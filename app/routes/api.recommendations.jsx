@@ -3,6 +3,7 @@ import db from "../db.server";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
 import { checkRateLimit } from "../services/rate-limiter.server";
 import { getWidgetSettings } from "../services/widget-settings.service";
+import { extractNumericGid } from "../utils/gid.js";
 
 // CORS headers for preflight request routing
 const corsHeaders = {
@@ -23,6 +24,14 @@ function isProductAvailable(product) {
   return hasInventory && isActiveStatus;
 }
 
+function safeJsonError(error, status = 500) {
+  console.error(`Recommendations API error (${status}):`, error);
+  return Response.json(
+    { error: error?.message || "Server error" },
+    { status, headers: corsHeaders }
+  );
+}
+
 export const loader = async ({ request }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -30,7 +39,17 @@ export const loader = async ({ request }) => {
 
   try {
     // Authenticate the request via Shopify App Proxy signatures
-    const { session, admin } = await authenticate.public.appProxy(request);
+    let session;
+    let admin = null;
+    try {
+      const authResult = await authenticate.public.appProxy(request);
+      session = authResult.session;
+      admin = authResult.admin || null;
+    } catch (authErr) {
+      console.error("Recommendations API authentication failed:", authErr);
+      return safeJsonError(new Error("Authentication failed"), 401);
+    }
+
     const shopDomain = session ? session.shop : new URL(request.url).searchParams.get("shop");
     if (!shopDomain) {
       return Response.json(
@@ -44,14 +63,25 @@ export const loader = async ({ request }) => {
     const visitorId = url.searchParams.get("visitorId");
 
     // Fetch shop currency for client-side formatting
-    const shopRecord = await db.shop.findUnique({
-      where: { shop: shopDomain },
-      select: { currency: true },
-    });
-    const shopCurrency = shopRecord?.currency || "USD";
+    let shopCurrency = "USD";
+    try {
+      const shopRecord = await db.shop.findUnique({
+        where: { shop: shopDomain },
+        select: { currency: true },
+      });
+      shopCurrency = shopRecord?.currency || "USD";
+    } catch (shopErr) {
+      console.error("Recommendations API: failed to fetch shop currency:", shopErr);
+    }
 
     // Check monthly recommendation limit based on billing plan
-    const limitCheck = await checkRecommendationLimit(shopDomain);
+    let limitCheck;
+    try {
+      limitCheck = await checkRecommendationLimit(shopDomain);
+    } catch (limitErr) {
+      console.error("Recommendations API: failed to check recommendation limit:", limitErr);
+      limitCheck = { allowed: true, limit: null, used: 0, remaining: Infinity, planName: "Free", planKey: "FREE" };
+    }
     if (!limitCheck.allowed) {
       return Response.json(
         {
@@ -221,21 +251,30 @@ export const loader = async ({ request }) => {
       },
     });
 
-    // Batch-fetch missing handles from Shopify in one query
-    const productsMissingHandles = dbProducts
-      .map((p, i) => ({ product: p, index: i }))
-      .filter(({ product }) => !product.handle);
-
-    if (productsMissingHandles.length > 0 && admin) {
+    // Batch-fetch product details (handles + variants) from Shopify in one query.
+    // We fetch for all recommended products because the cache table does not store variants.
+    if (admin) {
       try {
-        const ids = productsMissingHandles.map(({ product }) => product.id);
+        const ids = dbProducts.map((p) => p.id);
         const gqlResponse = await admin.graphql(
           `#graphql
-          query GetProductHandles($ids: [ID!]!) {
+          query GetProductDetails($ids: [ID!]!) {
             nodes(ids: $ids) {
               ... on Product {
                 id
                 handle
+                variants(first: 100) {
+                  edges {
+                    node {
+                      id
+                      title
+                      availableForSale
+                      price {
+                        amount
+                      }
+                    }
+                  }
+                }
               }
             }
           }`,
@@ -243,21 +282,50 @@ export const loader = async ({ request }) => {
         );
         const gqlData = await gqlResponse.json();
         const nodes = gqlData.data?.nodes || [];
-        const handleMap = new Map(nodes.filter(Boolean).map((n) => [n.id, n.handle]));
 
-        for (const { product, index } of productsMissingHandles) {
+        const handleMap = new Map();
+        const variantsMap = new Map();
+
+        for (const node of nodes.filter(Boolean)) {
+          handleMap.set(node.id, node.handle);
+
+          const variants = (node.variants?.edges || []).map((edge) => ({
+            numericId: Number(extractNumericGid(edge.node.id)),
+            title: edge.node.title,
+            price: parseFloat(edge.node.price.amount),
+            available: edge.node.availableForSale === true,
+          }));
+          variantsMap.set(node.id, variants);
+        }
+
+        // Backfill missing handles into DB cache for future requests.
+        for (let i = 0; i < dbProducts.length; i++) {
+          const product = dbProducts[i];
           const handle = handleMap.get(product.id);
-          if (handle) {
+          if (handle && !product.handle) {
             const updated = await db.product.update({
               where: { id: product.id },
               data: { handle },
             });
-            dbProducts[index] = updated;
+            dbProducts[i] = updated;
             console.log(`On-the-fly updated missing handle for ${product.id}: ${handle}`);
           }
         }
+
+        // Attach variants to each product for the response.
+        for (const product of dbProducts) {
+          product.variants = variantsMap.get(product.id) || [];
+        }
       } catch (err) {
-        console.error(`Failed to batch-fetch missing handles:`, err);
+        console.error(`Failed to batch-fetch product details:`, err);
+        // Graceful fallback: return empty variants array so the response still works.
+        for (const product of dbProducts) {
+          product.variants = [];
+        }
+      }
+    } else {
+      for (const product of dbProducts) {
+        product.variants = [];
       }
     }
 
@@ -268,16 +336,26 @@ export const loader = async ({ request }) => {
         const prod = productMap.get(rec.id);
         if (!prod) return null;
 
-        const canQuickAdd = isProductAvailable(prod) && prod.hasSingleVariant === true;
+        const variants = prod.variants || [];
+        // Trust the DB flag first; if it disagrees with the live variant count,
+        // the live count wins because that reflects the current catalog state.
+        const hasSingleVariant = variants.length > 0
+          ? variants.length <= 1
+          : prod.hasSingleVariant !== false;
+        const canQuickAdd = isProductAvailable(prod) && hasSingleVariant;
+
+        // Always expose a usable variant ID if we possibly can. The client needs
+        // *something* to send to /cart/add.js even if the live variant fetch failed.
+        const fallbackVariantId = prod.firstVariantId || (variants[0] ? String(variants[0].numericId) : null);
+
         const result = {
           ...prod,
           score: rec.score,
           canQuickAdd,
+          hasSingleVariant,
+          variants,
+          variantId: fallbackVariantId,
         };
-
-        if (canQuickAdd) {
-          result.variantId = prod.firstVariantId;
-        }
 
         return result;
       })
@@ -299,6 +377,14 @@ export const loader = async ({ request }) => {
       }
     }
 
+    // Fetch widget settings for the response, with a safe fallback.
+    let widgetSettings = {};
+    try {
+      widgetSettings = await getWidgetSettings(shopDomain);
+    } catch (settingsErr) {
+      console.error("Recommendations API: failed to fetch widget settings:", settingsErr);
+    }
+
     return Response.json(
       {
         recommendations: finalRecommendations,
@@ -309,16 +395,12 @@ export const loader = async ({ request }) => {
           limit: limitCheck.limit,
           planName: limitCheck.planName,
         },
-        widgetSettings: await getWidgetSettings(shopDomain),
+        widgetSettings,
       },
       { headers: corsHeaders }
     );
   } catch (error) {
-    console.error("Recommendations API error:", error);
-    return Response.json(
-      { error: error.message || "Server error" },
-      { status: 500, headers: corsHeaders }
-    );
+    return safeJsonError(error, 500);
   }
 };
 

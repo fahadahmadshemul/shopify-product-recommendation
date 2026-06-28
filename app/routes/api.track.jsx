@@ -125,6 +125,14 @@ export const loader = async ({ request }) => {
   return Response.json({ ok: true }, { headers: corsHeaders });
 };
 
+function safeJsonError(error, status = 500) {
+  console.error(`Track API error (${status}):`, error);
+  return Response.json(
+    { error: error?.message || "Server error" },
+    { status, headers: corsHeaders }
+  );
+}
+
 export const action = async ({ request }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -132,7 +140,16 @@ export const action = async ({ request }) => {
 
   try {
     // Authenticate through Shopify App Proxy to verify HMAC signature
-    const { session, admin } = await authenticate.public.appProxy(request);
+    let session;
+    let admin = null;
+    try {
+      const authResult = await authenticate.public.appProxy(request);
+      session = authResult.session;
+      admin = authResult.admin || null;
+    } catch (authErr) {
+      console.error("Track API authentication failed:", authErr);
+      return safeJsonError(new Error("Authentication failed"), 401);
+    }
 
     // Get the shop domain from the session or fallback to request params
     const shopDomain = session ? session.shop : new URL(request.url).searchParams.get("shop");
@@ -143,7 +160,15 @@ export const action = async ({ request }) => {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseErr) {
+      return Response.json(
+        { error: "Invalid JSON body" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
     const { visitorId, productId, eventType, duration, price, customerId } = body;
 
     if (!visitorId || !productId || !eventType) {
@@ -207,13 +232,24 @@ export const action = async ({ request }) => {
     }
 
     // Fire-and-forget: sync missing product without blocking the response, respecting plan limit
-    const exists = await db.product.findUnique({
-      where: { id: productId },
-    });
+    try {
+      const exists = await db.product.findUnique({
+        where: { id: productId },
+      });
 
-    if (!exists && admin) {
-      const plan = await getActivePlan(shopDomain);
-      syncProductInBackground(admin, productId, shopDomain, plan.limits.products);
+      if (!exists && admin) {
+        let plan;
+        try {
+          plan = await getActivePlan(shopDomain);
+        } catch (planErr) {
+          console.warn(`Track API: failed to resolve active plan for ${shopDomain}, using free limits:`, planErr.message);
+          plan = { limits: { products: null } };
+        }
+        syncProductInBackground(admin, productId, shopDomain, plan.limits.products);
+      }
+    } catch (syncErr) {
+      // Background sync is best-effort; don't fail the track request if it errors.
+      console.error("Track API: background sync error:", syncErr);
     }
 
     // Save visitor activity (view, cart, purchase)
@@ -231,14 +267,16 @@ export const action = async ({ request }) => {
     // localStorage and must send it back on /api/gdpr requests to prove ownership.
     // This replaces the httpOnly cookie approach which is not viable in a cross-domain
     // App Proxy context — see app/utils/visitor-token.server.js for full explanation.
-    const visitorToken = signVisitorId(visitorId);
+    let visitorToken;
+    try {
+      visitorToken = signVisitorId(visitorId);
+    } catch (tokenErr) {
+      console.error("Track API: failed to sign visitor token:", tokenErr);
+      return safeJsonError(new Error("Failed to generate visitor token"), 500);
+    }
 
     return Response.json({ success: true, visitorToken }, { headers: corsHeaders });
   } catch (error) {
-    console.error("Track error:", error);
-    return Response.json(
-      { error: error.message || "Server error" },
-      { status: 500, headers: corsHeaders }
-    );
+    return safeJsonError(error, 500);
   }
 };

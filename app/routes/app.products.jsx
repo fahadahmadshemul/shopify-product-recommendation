@@ -413,7 +413,7 @@ export default function ProductsPage() {
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
             >
               <p>
-                Click "Sync Products" or "Search & Add Products" to add store
+                Click &quot;Sync Products&quot; or &quot;Search & Add Products&quot; to add store
                 products.
               </p>
             </EmptyState>
