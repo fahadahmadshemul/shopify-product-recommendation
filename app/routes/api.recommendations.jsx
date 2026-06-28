@@ -217,16 +217,18 @@ export const loader = async ({ request }) => {
     if (productsMissingHandles.length > 0 && admin) {
       try {
         const ids = productsMissingHandles.map(({ product }) => product.id);
-        const gqlResponse = await admin.graphql(`
-          query {
-            nodes(ids: [${ids.map((id) => `"${id}"`).join(", ")}]) {
+        const gqlResponse = await admin.graphql(
+          `#graphql
+          query GetProductHandles($ids: [ID!]!) {
+            nodes(ids: $ids) {
               ... on Product {
                 id
                 handle
               }
             }
-          }
-        `);
+          }`,
+          { variables: { ids } }
+        );
         const gqlData = await gqlResponse.json();
         const nodes = gqlData.data?.nodes || [];
         const handleMap = new Map(nodes.filter(Boolean).map((n) => [n.id, n.handle]));

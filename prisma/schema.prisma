@@ -78,12 +78,14 @@ model VisitorActivity {
   productId  String
   eventType  String // "view", "cart", "purchase"
   duration   Int? // how many seconds
-  price      Float? // unit price at time of event (for purchase events)
+  price      Float? // total line-item value at time of event (price * quantity for purchases)
+  orderId    String? // Shopify order ID (groups line items back into an order for AOV)
   createdAt  DateTime @default(now())
 
   @@index([shopDomain, productId])
   @@index([shopDomain, visitorId])
   @@index([shopDomain, customerId])
+  @@index([shopDomain, orderId])
 }
 
 // Phase 4 — Recommendations

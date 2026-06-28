@@ -188,7 +188,11 @@ export async function resolveActivePlan(shopDomain, billing = null) {
         }
       }
 
-      return { planKey: activePlanKey, plan: activePlan };
+      const trialEndsAt = activeSubscription?.trialEnd
+        ? new Date(activeSubscription.trialEnd)
+        : null;
+
+      return { planKey: activePlanKey, plan: activePlan, trialEndsAt };
     } catch (err) {
       console.warn(`Live billing.check failed for ${shopDomain}, falling back to local DB cache:`, err.message);
     }
@@ -208,12 +212,21 @@ export async function resolveActivePlan(shopDomain, billing = null) {
     });
 
     if (shopRecord && shopRecord.subscriptions.length > 0) {
-      const planKey = shopRecord.subscriptions[0].planKey;
+      const subscription = shopRecord.subscriptions[0];
+      const planKey = subscription.planKey;
       if (BILLING_PLANS[planKey]) {
-        return { planKey, plan: BILLING_PLANS[planKey] };
+        return {
+          planKey,
+          plan: BILLING_PLANS[planKey],
+          trialEndsAt: subscription.trialEndsAt || null,
+        };
       }
     }
   }
 
-  return { planKey: BILLING_PLAN_KEYS.FREE, plan: BILLING_PLANS[BILLING_PLAN_KEYS.FREE] };
+  return {
+    planKey: BILLING_PLAN_KEYS.FREE,
+    plan: BILLING_PLANS[BILLING_PLAN_KEYS.FREE],
+    trialEndsAt: null,
+  };
 }

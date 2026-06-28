@@ -15,6 +15,17 @@ const DEFAULTS = {
   saleBadgeColor: null,
 };
 
+const HEADING_FIELDS = ["heading", "coldStartHeading", "emptyHeading"];
+const MAX_HEADING_LENGTH = 80;
+
+function sanitizeHeading(value) {
+  if (typeof value !== "string") return null;
+  // Strip any HTML tags so headings are plain text only.
+  const stripped = value.replace(/<\/?[^>]+>/g, "").trim();
+  if (!stripped) return null;
+  return stripped.slice(0, MAX_HEADING_LENGTH);
+}
+
 export function getDefaults() {
   return { ...DEFAULTS };
 }
@@ -36,7 +47,12 @@ export async function getWidgetSettings(shopDomain) {
 export async function saveWidgetSettings(shopDomain, settings) {
   const cleaned = {};
   for (const [key, value] of Object.entries(settings)) {
-    if (value !== null && value !== "" && value !== undefined) {
+    if (value === null || value === "" || value === undefined) continue;
+
+    if (HEADING_FIELDS.includes(key)) {
+      const sanitized = sanitizeHeading(value);
+      if (sanitized) cleaned[key] = sanitized;
+    } else {
       cleaned[key] = value;
     }
   }

@@ -23,6 +23,8 @@ export const action = async ({ request }) => {
 
     // 2. Iterate line items and record purchase event for each
     const lineItems = payload.line_items || [];
+    const orderId = payload.id ? String(payload.id) : null;
+
     for (const item of lineItems) {
       if (!item.product_id) {
         continue;
@@ -30,7 +32,9 @@ export const action = async ({ request }) => {
 
       // Convert product_id to gid format matching database Product ID
       const productGid = `gid://shopify/Product/${item.product_id}`;
-      const price = item.price ? parseFloat(item.price) : null;
+      const unitPrice = item.price ? parseFloat(item.price) : 0;
+      const quantity = item.quantity ? Number(item.quantity) : 1;
+      const price = unitPrice * quantity;
 
       try {
         await saveActivity({
@@ -40,8 +44,9 @@ export const action = async ({ request }) => {
           eventType: "purchase",
           price,
           customerId,
+          orderId,
         });
-        console.log(`Recorded purchase activity for product ${productGid} (Price: ${price})`);
+        console.log(`Recorded purchase activity for product ${productGid} (Price: ${price}, Order: ${orderId})`);
       } catch (err) {
         console.error(`Failed to save activity for product ${productGid}:`, err);
       }

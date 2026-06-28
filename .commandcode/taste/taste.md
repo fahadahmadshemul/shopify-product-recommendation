@@ -1,6 +1,7 @@
 # Taste (Continuously Learned by [CommandCode][cmd])
 
 [cmd]: https://commandcode.ai/
+
 
 # workflow
 - When reviewing a system, explore all related files thoroughly first, then proactively implement the improvements rather than just providing analysis. Confidence: 0.70

@@ -17,9 +17,10 @@ import {
   Banner,
 } from "@shopify/polaris";
 import { checkRecommendationLimit } from "../services/recommendation-limit.service";
+import { resolveActivePlan } from "../services/billing.service";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
 
   // Phase 1 — all independent queries run in parallel
   const [
@@ -49,7 +50,7 @@ export const loader = async ({ request }) => {
     }),
     db.visitorActivity.findMany({
       where: { shopDomain: session.shop, eventType: "purchase" },
-      select: { visitorId: true, productId: true, price: true },
+      select: { visitorId: true, productId: true, price: true, orderId: true },
     }),
     db.recommendation.findMany({
       where: { shopDomain: session.shop },
@@ -68,11 +69,11 @@ export const loader = async ({ request }) => {
       where: { shopDomain: session.shop },
       select: { id: true, title: true, imageUrl: true },
     }),
-    checkRecommendationLimit(session.shop),
-    db.billingSubscription.findFirst({
-      where: { shop: { shop: session.shop }, status: "ACTIVE" },
-      select: { trialEndsAt: true },
-    }),
+    checkRecommendationLimit(session.shop, billing),
+    (async () => {
+      const { trialEndsAt } = await resolveActivePlan(session.shop, billing);
+      return trialEndsAt;
+    })(),
     db.visitorActivity
       .groupBy({
         by: ["visitorId"],
@@ -261,15 +262,19 @@ export const loader = async ({ request }) => {
 
   const chartData = Object.values(dailyDataMap);
 
-  // Calculate actual average order value from stored purchase prices
-  const purchasePrices = purchases
-    .map((p) => p.price)
-    .filter((p) => p !== null && p !== undefined);
+  // Calculate average order value by grouping line-item purchase rows by orderId.
+  // Each row already stores the line total (price * quantity) from the webhook.
+  const orderTotals = new Map();
+  purchases.forEach((p, idx) => {
+    const key = p.orderId ?? `__row_${idx}`;
+    orderTotals.set(key, (orderTotals.get(key) || 0) + (p.price || 0));
+  });
+  const orderCount = orderTotals.size;
   const avgOrderValue =
-    purchasePrices.length > 0
+    orderCount > 0
       ? Math.round(
-          (purchasePrices.reduce((sum, p) => sum + p, 0) /
-            purchasePrices.length) *
+          (Array.from(orderTotals.values()).reduce((sum, total) => sum + total, 0) /
+            orderCount) *
             100,
         ) / 100
       : 0;
@@ -286,10 +291,11 @@ export const loader = async ({ request }) => {
     topProducts,
     chartData,
     recLimitInfo,
-    trialEndsAt: trialEndsAt?.trialEndsAt || null,
+    trialEndsAt: trialEndsAt || null,
     uniqueVisitors,
     avgDuration,
     avgOrderValue,
+    orderCount,
   };
 };
 
@@ -310,6 +316,7 @@ export default function Index() {
     uniqueVisitors,
     avgDuration,
     avgOrderValue,
+    orderCount,
   } = useLoaderData();
 
   const isInTrial = trialEndsAt && new Date(trialEndsAt) > new Date();
@@ -595,7 +602,7 @@ export default function Index() {
                         Est. Revenue
                       </Text>
                       <Text as="p" variant="heading3xl" fontWeight="bold">
-                        {(totalPurchases * avgOrderValue).toLocaleString(
+                        {(orderCount * avgOrderValue).toLocaleString(
                           "en-US",
                           {
                             style: "currency",
@@ -605,7 +612,7 @@ export default function Index() {
                         )}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Based on avg. order value
+                        Based on {orderCount} order{orderCount !== 1 ? "s" : ""}
                       </Text>
                     </BlockStack>
                   </Card>

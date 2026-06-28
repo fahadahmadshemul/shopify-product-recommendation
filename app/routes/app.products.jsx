@@ -434,9 +434,9 @@ export default function ProductsPage() {
               headings={[
                 { title: "Image" },
                 { title: "Product Title" },
-                { title: "Price", alignment: "end" },
-                { title: "Recommendations", alignment: "end" },
-                { title: "Actions", alignment: "end" },
+                { title: "Price"},
+                { title: "Recommendations"},
+                { title: "Actions"},
               ]}
             >
               {rowMarkup}

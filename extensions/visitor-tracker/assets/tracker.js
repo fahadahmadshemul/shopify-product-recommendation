@@ -184,6 +184,8 @@
   // 7. Render widget function
   function renderRecommendations(data) {
     const recommendations = data.recommendations || [];
+    // Skip products that haven't been synced with a handle yet so cards never link to "#".
+    const displayRecommendations = recommendations.filter((rec) => rec.handle);
     const shopCurrency = data.shopCurrency || "USD";
     const coldStart = data.coldStart || false;
 
@@ -402,11 +404,11 @@
     document.head.appendChild(style);
 
     // Build Cards HTML
-    const cardsHtml = recommendations.length > 0
-      ? recommendations
+    const cardsHtml = displayRecommendations.length > 0
+      ? displayRecommendations
         .map((rec) => {
           const imageSrc = rec.imageUrl || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F4F4F4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%23999999'>No Image</text></svg>`;
-          const productUrl = rec.handle ? `/products/${rec.handle}` : "#";
+          const productUrl = `/products/${rec.handle}`;
           const hasSale = rec.compareAtPrice && rec.compareAtPrice > rec.price;
           const saleBadge = hasSale
             ? `<span class="shopify-recs-sale-badge">SALE</span>`
@@ -415,7 +417,7 @@
             ? '<span class="shopify-recs-compare-price">' + formatPrice(Number(rec.compareAtPrice)) + '</span>'
             : "";
           return `
-          <a href="${productUrl}" class="shopify-recs-card" data-rec-id="${rec.id}">
+          <a href="${escapeHtml(productUrl)}" class="shopify-recs-card" data-rec-id="${escapeHtml(rec.id)}">
             <div class="shopify-recs-image-wrapper">
               ${saleBadge}
               <img src="${imageSrc}" alt="${escapeHtml(rec.title)}" class="shopify-recs-image" loading="lazy" />
@@ -433,13 +435,15 @@
         .join("")
       : "";
 
-    const headerTitle = coldStart
-      ? (coldStartHeading || "Popular Products")
-      : recommendations.length > 0
-        ? (heading || "Recommended for You")
-        : (emptyHeading || "Coming Soon");
+    const headerTitle = escapeHtml(
+      coldStart
+        ? (coldStartHeading || "Popular Products")
+        : displayRecommendations.length > 0
+          ? (heading || "Recommended for You")
+          : (emptyHeading || "Coming Soon")
+    );
 
-    const emptyMessage = recommendations.length === 0
+    const emptyMessage = displayRecommendations.length === 0
       ? `<p class="shopify-recs-empty-message">We're learning what you love! Personalized recommendations will appear as you browse more products.</p>`
       : "";
 

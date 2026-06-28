@@ -23,8 +23,8 @@ export async function getMonthlyRecommendationCount(shopDomain) {
   });
 }
 
-export async function checkRecommendationLimit(shopDomain) {
-  const plan = await getActivePlan(shopDomain);
+export async function checkRecommendationLimit(shopDomain, billing = null) {
+  const plan = await getActivePlan(shopDomain, billing);
   const limit = plan.limits.recommendations;
   const used = await getMonthlyRecommendationCount(shopDomain);
 
