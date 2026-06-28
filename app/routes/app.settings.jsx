@@ -34,6 +34,9 @@ const DEFAULTS = {
   titleColor: null,
   priceColor: null,
   saleBadgeColor: null,
+  buttonBackgroundColor: null,
+  buttonTextColor: null,
+  dropdownBorderColor: null,
 };
 
 export const loader = async ({ request }) => {
@@ -66,6 +69,9 @@ export const action = async ({ request }) => {
       "titleColor",
       "priceColor",
       "saleBadgeColor",
+      "buttonBackgroundColor",
+      "buttonTextColor",
+      "dropdownBorderColor",
     ];
     for (const f of allFields) {
       const val = formData.get(f);
@@ -131,6 +137,9 @@ export default function WidgetSettings() {
       "titleColor",
       "priceColor",
       "saleBadgeColor",
+      "buttonBackgroundColor",
+      "buttonTextColor",
+      "dropdownBorderColor",
       "borderWidth",
       "borderRadius",
     ];
@@ -159,6 +168,9 @@ export default function WidgetSettings() {
     { label: "Title", field: "titleColor", def: "theme default" },
     { label: "Price", field: "priceColor", def: "theme default" },
     { label: "Sale badge", field: "saleBadgeColor", def: "#C81E1E" },
+    { label: "Button background", field: "buttonBackgroundColor", def: "#000000" },
+    { label: "Button text", field: "buttonTextColor", def: "#FFFFFF" },
+    { label: "Dropdown border", field: "dropdownBorderColor", def: "#000000" },
   ];
 
   return (

@@ -370,22 +370,26 @@
     const customTitleColor = ws.titleColor;
     const customPriceColor = ws.priceColor;
     const customSaleBg = ws.saleBadgeColor;
+    const customButtonBg = ws.buttonBackgroundColor;
+    const customButtonText = ws.buttonTextColor;
+    const customDropdownBorder = ws.dropdownBorderColor;
 
-    const bg = hasCustomBg ? ws.backgroundColor : "rgb(var(--color-background, 255 255 255))";
-    const cardBg = hasCustomCardBg ? ws.cardBackgroundColor : "rgb(var(--color-background, 255 255 255))";
-    const borderCol = hasCustomBorder ? ws.borderColor : "rgba(var(--color-foreground, 0 0 0), var(--border-opacity, 0.08))";
-    const headCol = customHeadingColor || "rgb(var(--color-foreground, 0 0 0))";
-    const titleCol = customTitleColor || "rgb(var(--color-foreground, 0 0 0))";
-    const priceCol = customPriceColor || "rgb(var(--color-foreground, 0 0 0))";
+    const bg = hasCustomBg ? ws.backgroundColor : "#FFFFFF";
+    const cardBg = hasCustomCardBg ? ws.cardBackgroundColor : "#F5F5F5";
+    const borderCol = hasCustomBorder ? ws.borderColor : "#E5E5E5";
+    const headCol = customHeadingColor || "#000000";
+    const titleCol = customTitleColor || "#000000";
+    const priceCol = customPriceColor || "#000000";
     const saleBgCol = customSaleBg || "rgb(var(--color-badge-sale-background, 200 30 30))";
     const radius = customBorderR || "var(--border-radius, 8px)";
     const bdrWidth = customBorderW || "var(--border-width, 1px)";
-    const compareCol = customPriceColor
-      ? `${customPriceColor}88`
-      : "rgba(var(--color-foreground, 0 0 0), 0.55)";
+    const compareCol = customPriceColor ? `${customPriceColor}88` : "#999999";
     const shadowCol = hasCustomBorder
       ? `${ws.borderColor}22`
       : "rgba(var(--color-shadow, 0 0 0), var(--shadow-opacity, 0.08))";
+    const buttonBg = customButtonBg || "#000000";
+    const buttonText = customButtonText || "#FFFFFF";
+    const dropdownBorderCol = customDropdownBorder || "#000000";
 
     style.innerHTML = `
       #shopify-recommendations-widget {
@@ -419,41 +423,41 @@
         margin-bottom: 24px;
       }
       .shopify-recs-title {
-        font-size: calc(var(--font-heading-scale, 1) * 2.4rem);
-        font-weight: 600;
+        font-size: 2.4rem;
+        font-weight: 700;
         margin: 0;
         line-height: 1.3;
         letter-spacing: 0.06rem;
         color: ${headCol};
         font-family: var(--font-heading-family);
       }
-      @media (min-width: 750px) {
-        .shopify-recs-title {
-          font-size: calc(var(--font-heading-scale, 1) * 2.6rem);
-        }
-      }
       .shopify-recs-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+        grid-template-columns: 1fr;
+        gap: 16px;
       }
       @media (min-width: 750px) {
         .shopify-recs-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 24px;
+        }
+      }
+      @media (min-width: 990px) {
+        .shopify-recs-grid {
           grid-template-columns: repeat(4, 1fr);
-          gap: 16px;
+          gap: 24px;
         }
       }
       .shopify-recs-card {
         display: flex;
         flex-direction: column;
-        text-decoration: none;
-        color: inherit;
         height: 100%;
         position: relative;
         z-index: 0;
         border-radius: ${radius};
         overflow: hidden;
         background: ${cardBg};
+        padding: 16px;
       }
       .shopify-recs-card::after {
         content: '';
@@ -465,8 +469,6 @@
         bottom: 0;
         border-radius: ${radius};
         border: ${bdrWidth} solid ${borderCol};
-        box-shadow: var(--shadow-horizontal-offset, 0) var(--shadow-vertical-offset, 2px)
-          var(--shadow-blur-radius, 4px) ${shadowCol};
       }
       .shopify-recs-image-wrapper {
         position: relative;
@@ -475,6 +477,7 @@
         overflow: hidden;
         z-index: 0;
         background: ${cardBg};
+        border-radius: 4px;
       }
       .shopify-recs-image {
         position: absolute;
@@ -507,16 +510,16 @@
         border: 1px solid rgba(255, 255, 255, 0.15);
       }
       .shopify-recs-info {
-        padding: 12px 12px 14px;
+        padding: 16px 0 0 0;
         display: flex;
         flex-direction: column;
         flex: 1;
         width: 100%;
       }
       .shopify-recs-product-title {
-        font-size: calc(var(--font-heading-scale, 1) * 1.4rem);
+        font-size: 1.6rem;
         font-weight: 500;
-        line-height: calc(1 + 0.3 / max(1, var(--font-heading-scale, 1)));
+        line-height: 1.4;
         margin: 0 0 8px 0;
         color: ${titleCol};
         font-family: var(--font-body-family);
@@ -545,44 +548,91 @@
         margin-top: auto;
       }
       .shopify-recs-price {
-        font-size: 1.4rem;
-        font-weight: 600;
-        letter-spacing: 0.06rem;
+        font-size: 1.8rem;
+        font-weight: 700;
+        letter-spacing: 0.02rem;
         color: ${priceCol};
       }
       .shopify-recs-compare-price {
-        font-size: 1.2rem;
+        font-size: 1.6rem;
         color: ${compareCol};
         text-decoration: line-through;
         font-weight: 400;
       }
+      .shopify-recs-actions {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(var(--color-foreground, 0 0 0), 0.08);
+      }
+      .shopify-recs-variant-select-wrapper {
+        position: relative;
+      }
+      .shopify-recs-variant-select-wrapper::after {
+        content: '';
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 8px solid ${dropdownBorderCol};
+        pointer-events: none;
+      }
       .shopify-recs-variant-select {
         width: 100%;
-        margin-top: 10px;
-        padding: 8px 10px;
+        height: 44px;
+        padding: 0 32px 0 12px;
         border-radius: 6px;
-        border: 1px solid rgba(var(--color-foreground, 0 0 0), 0.2);
-        font-size: 1.3rem;
-        background: transparent;
+        border: 1px solid ${dropdownBorderCol};
+        font-size: 1.4rem;
+        font-weight: 400;
+        font-family: var(--font-body-family);
+        background-color: #FFFFFF;
         color: inherit;
         cursor: pointer;
+        -webkit-appearance: none;
+        appearance: none;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .shopify-recs-actions .shopify-recs-variant-select {
+        margin-top: 0;
       }
       .shopify-recs-atc-btn {
         width: 100%;
+        height: 48px;
         margin-top: 10px;
-        padding: 10px;
-        background: #008060;
-        color: #fff;
+        padding: 0 10px;
+        background: ${buttonBg};
+        color: ${buttonText};
         border: none;
         border-radius: 6px;
-        font-size: 1.4rem;
-        font-weight: 600;
+        font-size: 1.6rem;
+        font-weight: 500;
         cursor: pointer;
-        transition: opacity 0.2s;
+        transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease, color 0.2s ease;
       }
-      .shopify-recs-atc-btn:disabled {
+      .shopify-recs-atc-btn:hover:not(:disabled):not(.loading) {
+        opacity: 0.9;
+      }
+      .shopify-recs-atc-btn:active:not(:disabled):not(.loading) {
+        transform: scale(0.98);
+      }
+      .shopify-recs-atc-btn:disabled,
+      .shopify-recs-atc-btn.loading {
         opacity: 0.65;
         cursor: not-allowed;
+      }
+      .shopify-recs-atc-btn.added {
+        background: #1f8a4c;
+        color: #fff;
+      }
+      .shopify-recs-atc-btn.error {
+        background: rgb(var(--color-badge-sale-background, 200 30 30));
+        color: #fff;
       }
       .shopify-recs-empty-message {
         text-align: center;
@@ -626,17 +676,25 @@
             const optionsHtml = variants.map((v) => {
               const numericId = String(v.numericId);
               const isAvailable = v.available !== false;
-              const label = escapeHtml(v.title) + " — " + formatPrice(Number(v.price)) + (isAvailable ? "" : " (Unavailable)");
+              const label = escapeHtml(v.title) + " – " + formatPrice(Number(v.price)) + (isAvailable ? "" : " (Unavailable)");
               const selected = numericId === defaultVariantId ? " selected" : "";
               const disabled = isAvailable ? "" : " disabled";
               return `<option value="${numericId}"${selected}${disabled}>${label}</option>`;
             }).join("");
-            variantSelectorHtml = `<select class="shopify-recs-variant-select" data-card-id="${index}">${optionsHtml}</select>`;
+            variantSelectorHtml = `
+              <div class="shopify-recs-variant-select-wrapper">
+                <select class="shopify-recs-variant-select" data-card-id="${index}">${optionsHtml}</select>
+              </div>
+            `;
           }
 
           // ALWAYS render the button without a disabled attribute. It is only
           // temporarily disabled inside the click handler while the request is in flight.
           const atcButtonHtml = `<button type="button" class="shopify-recs-atc-btn" data-card-id="${index}">Add to Cart</button>`;
+
+          const actionsHtml = (variantSelectorHtml || atcButtonHtml)
+            ? `<div class="shopify-recs-actions">${variantSelectorHtml}${atcButtonHtml}</div>`
+            : "";
 
           return `
           <div class="shopify-recs-card" data-rec-id="${escapeHtml(rec.id)}" data-handle="${escapeHtml(rec.handle)}" data-selected-variant="${escapeHtml(defaultVariantId)}">
@@ -654,8 +712,7 @@
                 <span class="shopify-recs-price">${formatPrice(Number(rec.price))}</span>
                 ${comparePriceHtml}
               </div>
-              ${variantSelectorHtml}
-              ${atcButtonHtml}
+              ${actionsHtml}
             </div>
           </div>
         `;

@@ -269,9 +269,7 @@ export const loader = async ({ request }) => {
                       id
                       title
                       availableForSale
-                      price {
-                        amount
-                      }
+                      price
                     }
                   }
                 }
@@ -281,7 +279,13 @@ export const loader = async ({ request }) => {
           { variables: { ids } }
         );
         const gqlData = await gqlResponse.json();
-        const nodes = gqlData.data?.nodes || [];
+
+        const hasErrors = gqlData.errors && gqlData.errors.length > 0;
+        if (hasErrors) {
+          console.error("Shopify GraphQL errors in GetProductDetails:", gqlData.errors);
+        }
+
+        const nodes = hasErrors ? [] : (gqlData.data?.nodes || []);
 
         const handleMap = new Map();
         const variantsMap = new Map();
@@ -292,7 +296,7 @@ export const loader = async ({ request }) => {
           const variants = (node.variants?.edges || []).map((edge) => ({
             numericId: Number(extractNumericGid(edge.node.id)),
             title: edge.node.title,
-            price: parseFloat(edge.node.price.amount),
+            price: parseFloat(edge.node.price),
             available: edge.node.availableForSale === true,
           }));
           variantsMap.set(node.id, variants);

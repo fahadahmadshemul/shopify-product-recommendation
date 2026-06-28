@@ -13,6 +13,9 @@ const DEFAULTS = {
   titleColor: null,
   priceColor: null,
   saleBadgeColor: null,
+  buttonBackgroundColor: null,
+  buttonTextColor: null,
+  dropdownBorderColor: null,
 };
 
 const HEADING_FIELDS = ["heading", "coldStartHeading", "emptyHeading"];
