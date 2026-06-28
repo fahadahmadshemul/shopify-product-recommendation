@@ -4,7 +4,6 @@ import { authenticate } from "../shopify.server";
 import {
   getPlan,
   BILLING_PLAN_KEYS,
-  PAID_PLAN_NAMES,
   PAID_PLAN_KEYS,
 } from "../services/billing.service";
 import db from "../db.server";
@@ -57,9 +56,12 @@ export const action = async ({ request }) => {
 
   // Handle Paid plan upgrade
   const returnUrl = new URL(
-    `/admin/apps/${process.env.SHOPIFY_API_KEY}/app`,
+    `/admin/apps/${process.env.SHOPIFY_API_KEY}/app/billing/success`,
     `https://${session.shop}`,
   );
+  if (host) {
+    returnUrl.searchParams.set("host", host);
+  }
 
   try {
     await billing.request({

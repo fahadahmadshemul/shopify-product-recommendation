@@ -7,7 +7,6 @@ import { resolveTenant } from "../services/tenant.service.js";
 import {
   BILLING_PLAN_KEYS,
   BILLING_PLANS,
-  PAID_PLAN_NAMES,
   PAID_PLAN_KEYS,
   getPlanByName,
 } from "../services/billing.service";

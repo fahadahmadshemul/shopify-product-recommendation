@@ -10,7 +10,7 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 import { saveShopToDb } from "./services/shop.server.js";
 import { DeliveryMethod } from "@shopify/shopify-api";
-import { buildShopifyBillingConfig, BILLING_PLANS } from "./services/billing.service";
+import { buildShopifyBillingConfig } from "./services/billing.service";
 
 // Build the dynamically formatted plans dictionary required by Shopify Remix
 const billingConfig = buildShopifyBillingConfig({
@@ -60,41 +60,6 @@ const shopify = shopifyApp({
     APP_SUBSCRIPTIONS_UPDATE: {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/api/webhooks",
-      callback: async (topic, shop, body) => {
-        const payload = JSON.parse(body);
-        const subscription = payload.app_subscription || payload.appSubscription;
-        console.log(`Webhook received [${topic}] for ${shop}`);
-
-        if (prisma.billingSubscription) {
-          const shopRecord = await prisma.shop.findUnique({
-            where: { shop },
-            select: { id: true },
-          });
-
-          if (!shopRecord) {
-            console.error(`Shop not found for webhook: ${shop}`);
-            return;
-          }
-
-          await prisma.billingSubscription.upsert({
-            where: { id: subscription.admin_graphql_api_id },
-            create: {
-              id: subscription.admin_graphql_api_id,
-              shopId: shopRecord.id,
-              shopifySubscriptionId: subscription.admin_graphql_api_id,
-              planKey: subscription.name.toUpperCase(),
-              status: subscription.status,
-              trialEndsAt: subscription.trial_ends_at ? new Date(subscription.trial_ends_at) : null,
-              currentPeriodEndsAt: subscription.current_period_end ? new Date(subscription.current_period_end) : null,
-            },
-            update: {
-              status: subscription.status,
-              trialEndsAt: subscription.trial_ends_at ? new Date(subscription.trial_ends_at) : null,
-              currentPeriodEndsAt: subscription.current_period_end ? new Date(subscription.current_period_end) : null,
-            },
-          });
-        }
-      },
     },
   },
 });
