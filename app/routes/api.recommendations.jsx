@@ -72,16 +72,28 @@ export const loader = async ({ request }) => {
       );
     }
 
-    // --- Recommendation Algorithm with Event-Weighted Scoring & Recency Decay ---
-    // Event weights: purchase = 5, cart = 3, view = 1
-    // Recency half-life: 14 days
-
-    const EVENT_WEIGHTS = { purchase: 5, cart: 3, view: 1 };
-    const RECENCY_HALF_LIFE_DAYS = 14;
-    const RECENCY_DECAY_RATE = Math.LN2 / RECENCY_HALF_LIFE_DAYS;
-
-    const isProPlan = limitCheck.planKey === "PRO";
-    const priorityBoost = isProPlan ? 1.5 : 1;
+    // Build the set of products to exclude from all recommendation paths.
+    // A product is excluded if:
+    //   (a) the merchant manually flagged it (excludedFromRecs = true), OR
+    //   (b) it has a known non-ACTIVE status (null status = not yet synced → treated as ACTIVE), OR
+    //   (c) it has an explicit zero-inventory count (null = unknown → treated as available)
+    // This set is applied at scoring time (not just fetch time) so excluded products
+    // don't indirectly boost co-occurring products' scores.
+    const unavailableProducts = await db.product.findMany({
+      where: {
+        shopDomain,
+        OR: [
+          { excludedFromRecs: true },
+          { status: { not: null, notIn: ["ACTIVE"] } },
+          { totalInventory: 0 },
+        ],
+      },
+      select: { id: true },
+    });
+    const excludedProductIds = new Set([
+      productId, // always exclude the current product from its own recommendations
+      ...unavailableProducts.map((p) => p.id),
+    ]);
 
     // 1. Find other visitors who interacted with the current product
     const otherVisitors = await db.visitorActivity.findMany({
@@ -100,11 +112,13 @@ export const loader = async ({ request }) => {
 
     if (visitorIds.length > 0) {
       // 2. Fetch raw events from those visitors (for weighted & recency scoring)
+      //    Exclude unavailable/merchant-excluded products at query time so they don't
+      //    accumulate score and don't inflate scores of co-occurring products.
       const relatedEvents = await db.visitorActivity.findMany({
         where: {
           shopDomain,
           visitorId: { in: visitorIds },
-          productId: { not: productId },
+          productId: { notIn: [...excludedProductIds] },
         },
         select: {
           productId: true,
@@ -117,16 +131,7 @@ export const loader = async ({ request }) => {
 
       // Apply recency decay + event weight to score each product
       const now = Date.now();
-      const scoreMap = new Map();
-
-      for (const event of relatedEvents) {
-        const daysAgo = (now - new Date(event.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        const recencyFactor = Math.exp(-RECENCY_DECAY_RATE * daysAgo);
-        const eventWeight = EVENT_WEIGHTS[event.eventType] || 1;
-        const score = eventWeight * recencyFactor * priorityBoost;
-
-        scoreMap.set(event.productId, (scoreMap.get(event.productId) || 0) + score);
-      }
+      const scoreMap = scoreEvents(relatedEvents, now, limitCheck.planKey);
 
       // Sort by weighted score descending, take top maxRecs
       recommendedProductIds = [...scoreMap.entries()]
@@ -137,12 +142,16 @@ export const loader = async ({ request }) => {
 
     // 3. Fallback to top engaging products if fewer than maxRecs recommendations
     if (recommendedProductIds.length < maxRecs) {
-      const excludedIds = [productId, ...recommendedProductIds.map((r) => r.id)];
+      // Merge already-recommended IDs into the excluded set so the fallback doesn't duplicate
+      const fallbackExcluded = new Set([
+        ...excludedProductIds,
+        ...recommendedProductIds.map((r) => r.id),
+      ]);
 
       const topEvents = await db.visitorActivity.findMany({
         where: {
           shopDomain,
-          productId: { notIn: excludedIds },
+          productId: { notIn: [...fallbackExcluded] },
         },
         select: {
           productId: true,
@@ -153,16 +162,8 @@ export const loader = async ({ request }) => {
         take: 1000,
       });
 
-      const fallbackMap = new Map();
       const now2 = Date.now();
-
-      for (const event of topEvents) {
-        const daysAgo = (now2 - new Date(event.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        const recencyFactor = Math.exp(-RECENCY_DECAY_RATE * daysAgo);
-        const eventWeight = EVENT_WEIGHTS[event.eventType] || 1;
-        const score = eventWeight * recencyFactor * priorityBoost;
-        fallbackMap.set(event.productId, (fallbackMap.get(event.productId) || 0) + score);
-      }
+      const fallbackMap = scoreEvents(topEvents, now2, limitCheck.planKey);
 
       const missing = maxRecs - recommendedProductIds.length;
       const fallbackRecs = [...fallbackMap.entries()]
@@ -173,11 +174,22 @@ export const loader = async ({ request }) => {
       recommendedProductIds = [...recommendedProductIds, ...fallbackRecs];
     }
 
-    // 3b. Cold-start: no activity anywhere in the store — fall back to recent products
+    // 3b. Cold-start: no activity anywhere in the store — fall back to recent synced products.
+    //     Apply the same availability/exclude filter so stale draft products don't surface.
     if (recommendedProductIds.length === 0) {
       coldStart = true;
       const recentProducts = await db.product.findMany({
-        where: { shopDomain },
+        where: {
+          shopDomain,
+          excludedFromRecs: false,
+          id: { notIn: [productId] },
+          // Exclude products that are explicitly unavailable.
+          // null status/inventory = not yet synced → backward-compat: treat as available.
+          AND: [
+            { NOT: { AND: [{ status: { not: null } }, { status: { notIn: ["ACTIVE"] } }] } },
+            { NOT: { totalInventory: 0 } },
+          ],
+        },
         orderBy: { createdAt: "desc" },
         take: maxRecs,
         select: { id: true },
@@ -185,12 +197,15 @@ export const loader = async ({ request }) => {
       recommendedProductIds = recentProducts.map((p) => ({ id: p.id, score: 0 }));
     }
 
-    // 4. Fetch details for recommended products from cache table
+    // 4. Fetch details for recommended products from cache table.
+    //    The excludedFromRecs filter here is a safety net — products should already be
+    //    excluded upstream, but this prevents edge cases from slipping into the response.
     const productIdsToFetch = recommendedProductIds.map((r) => r.id);
     const dbProducts = await db.product.findMany({
       where: {
         id: { in: productIdsToFetch },
         shopDomain,
+        excludedFromRecs: false,
       },
     });
 
@@ -283,3 +298,37 @@ export const loader = async ({ request }) => {
     );
   }
 };
+
+/**
+ * Event-Weighted Scoring with Recency Decay.
+ *
+ * Event weights: purchase = 5, cart = 3, view = 1
+ * Recency decay is calculated using an exponential decay model with a 14-day half-life:
+ *   recencyFactor = exp(-decayRate * daysAgo)
+ * PRO plan gets a 1.5x multiplier boost on all recommendation scores.
+ *
+ * @param {Array} events - Activity events to score (with eventType, createdAt, productId).
+ * @param {number} now - The timestamp representing current time.
+ * @param {string} planKey - Billing plan tier of the shop (e.g. "PRO", "BASIC", "FREE").
+ * @returns {Map<string, number>} Map of productId -> raw score.
+ */
+export function scoreEvents(events, now, planKey) {
+  const EVENT_WEIGHTS = { purchase: 5, cart: 3, view: 1 };
+  const RECENCY_HALF_LIFE_DAYS = 14;
+  const RECENCY_DECAY_RATE = Math.LN2 / RECENCY_HALF_LIFE_DAYS;
+
+  const isProPlan = planKey === "PRO";
+  const priorityBoost = isProPlan ? 1.5 : 1;
+  const scoreMap = new Map();
+
+  for (const event of events) {
+    const daysAgo = (now - new Date(event.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    const recencyFactor = Math.exp(-RECENCY_DECAY_RATE * daysAgo);
+    const eventWeight = EVENT_WEIGHTS[event.eventType] || 1;
+    const score = eventWeight * recencyFactor * priorityBoost;
+
+    scoreMap.set(event.productId, (scoreMap.get(event.productId) || 0) + score);
+  }
+
+  return scoreMap;
+}

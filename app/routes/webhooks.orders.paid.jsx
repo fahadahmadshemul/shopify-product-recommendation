@@ -17,7 +17,9 @@ export const action = async ({ request }) => {
       return new Response(null, { status: 200 });
     }
 
-    console.log(`Tracking purchase for order #${payload.order_number} and visitor ${visitorId}`);
+    const customerId = payload.customer?.id ? String(payload.customer.id) : null;
+
+    console.log(`Tracking purchase for order #${payload.order_number} and visitor ${visitorId} (Customer: ${customerId})`);
 
     // 2. Iterate line items and record purchase event for each
     const lineItems = payload.line_items || [];
@@ -37,6 +39,7 @@ export const action = async ({ request }) => {
           productId: productGid,
           eventType: "purchase",
           price,
+          customerId,
         });
         console.log(`Recorded purchase activity for product ${productGid} (Price: ${price})`);
       } catch (err) {

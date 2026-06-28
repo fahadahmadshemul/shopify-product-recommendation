@@ -21,6 +21,7 @@ import {
   InlineStack,
   Badge,
   Button,
+  Tooltip,
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -32,32 +33,15 @@ import {
 import { authenticate } from "../shopify.server.js";
 import db from "../db.server";
 import { extractNumericGid } from "../utils/gid.js";
-import {
-  BILLING_PLAN_KEYS,
-  BILLING_PLANS,
-  PAID_PLAN_KEYS,
-  getPlanByName,
-} from "../services/billing.service";
+import { resolveActivePlan } from "../services/billing.service";
 
 export const loader = async ({ request }) => {
   const { session, billing } = await authenticate.admin(request);
 
-  const [products, billingResult] = await Promise.all([
+  const [products, { plan: activePlan }] = await Promise.all([
     getProductsFromDB(session.shop),
-    billing.check({
-      plans: PAID_PLAN_KEYS,
-      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
-    }),
+    resolveActivePlan(session.shop, billing),
   ]);
-
-  const activeSubscription = billingResult.appSubscriptions.find(
-    (subscription) => subscription.status === "ACTIVE",
-  );
-  const activePaidPlan = activeSubscription
-    ? getPlanByName(activeSubscription.name)
-    : null;
-  const activePlanKey = activePaidPlan?.key ?? BILLING_PLAN_KEYS.FREE;
-  const activePlan = BILLING_PLANS[activePlanKey];
 
   return {
     products,
@@ -70,22 +54,11 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const actionType = formData.get("action");
 
-  const [currentCount, billingResult] = await Promise.all([
+  const [currentCount, { plan: activePlan }] = await Promise.all([
     db.product.count({ where: { shopDomain: session.shop } }),
-    billing.check({
-      plans: PAID_PLAN_KEYS,
-      isTest: globalThis.process?.env?.SHOPIFY_BILLING_TEST !== "false",
-    }),
+    resolveActivePlan(session.shop, billing),
   ]);
 
-  const activeSubscription = billingResult.appSubscriptions.find(
-    (subscription) => subscription.status === "ACTIVE",
-  );
-  const activePaidPlan = activeSubscription
-    ? getPlanByName(activeSubscription.name)
-    : null;
-  const activePlanKey = activePaidPlan?.key ?? BILLING_PLAN_KEYS.FREE;
-  const activePlan = BILLING_PLANS[activePlanKey];
   const limit = activePlan.limits.products;
 
   if (actionType === "sync") {
@@ -185,6 +158,19 @@ export const action = async ({ request }) => {
     });
   }
 
+  if (actionType === "toggle_exclude") {
+    const productId = formData.get("productId");
+    const excluded = formData.get("excluded") === "true";
+    if (!productId) {
+      return Response.json({ success: false, error: "Missing productId" });
+    }
+    await db.product.update({
+      where: { id: productId, shopDomain: session.shop },
+      data: { excludedFromRecs: excluded },
+    });
+    return Response.json({ success: true, toggled: productId, excludedFromRecs: excluded });
+  }
+
   return Response.json({ success: false, error: "Invalid action" });
 };
 
@@ -265,6 +251,17 @@ export default function ProductsPage() {
     );
   };
 
+  const handleToggleExclude = (productId, currentlyExcluded) => {
+    fetcher.submit(
+      {
+        action: "toggle_exclude",
+        productId,
+        excluded: String(!currentlyExcluded),
+      },
+      { method: "POST" },
+    );
+  };
+
   const handleBulkDelete = () => {
     fetcher.submit(
       {
@@ -280,41 +277,77 @@ export default function ProductsPage() {
   const { selectedResources, allResourcesSelected, handleSelectionChange } =
     useIndexResourceState(products);
 
-  const rowMarkup = products.map((product, index) => (
-    <IndexTable.Row
-      id={product.id}
-      key={product.id}
-      selected={selectedResources.includes(product.id)}
-      position={index}
-    >
-      <IndexTable.Cell>
-        <Thumbnail
-          source={product.imageUrl || ImageIcon}
-          alt={product.title}
-          size="small"
-        />
-      </IndexTable.Cell>
-      <IndexTable.Cell>
-        <Text variant="bodyMd" fontWeight="bold" as="span">
-          {product.title}
-        </Text>
-      </IndexTable.Cell>
-      <IndexTable.Cell>
-        <Text as="span" numeric>
-          {Number(product.price).toFixed(2)}
-        </Text>
-      </IndexTable.Cell>
-      <IndexTable.Cell>
-        <Button
-          tone="critical"
-          variant="plain"
-          onClick={() => handleSingleDelete(product.id)}
-        >
-          Remove
-        </Button>
-      </IndexTable.Cell>
-    </IndexTable.Row>
-  ));
+  const rowMarkup = products.map((product, index) => {
+    // Derive status badge tone and label for display
+    const statusTone =
+      product.status === "ACTIVE" ? "success"
+      : product.status === "DRAFT" ? "warning"
+      : product.status === "ARCHIVED" ? "critical"
+      : null;
+    const statusLabel = product.status
+      ? product.status.charAt(0) + product.status.slice(1).toLowerCase()
+      : null;
+
+    return (
+      <IndexTable.Row
+        id={product.id}
+        key={product.id}
+        selected={selectedResources.includes(product.id)}
+        position={index}
+      >
+        <IndexTable.Cell>
+          <Thumbnail
+            source={product.imageUrl || ImageIcon}
+            alt={product.title}
+            size="small"
+          />
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <BlockStack gap="100">
+            <Text variant="bodyMd" fontWeight="bold" as="span">
+              {product.title}
+            </Text>
+            {statusLabel && (
+              <Badge tone={statusTone}>{statusLabel}</Badge>
+            )}
+          </BlockStack>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" numeric>
+            {Number(product.price).toFixed(2)}
+          </Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Tooltip
+            content={
+              product.excludedFromRecs
+                ? "This product is excluded from recommendations. Click to re-include it."
+                : "Click to exclude this product from all recommendations (e.g. gift cards, samples)."
+            }
+          >
+            <Button
+              id={`exclude-btn-${product.id}`}
+              tone={product.excludedFromRecs ? undefined : "critical"}
+              variant="plain"
+              onClick={() => handleToggleExclude(product.id, product.excludedFromRecs)}
+              disabled={isSyncing}
+            >
+              {product.excludedFromRecs ? "Re-include" : "Exclude"}
+            </Button>
+          </Tooltip>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Button
+            tone="critical"
+            variant="plain"
+            onClick={() => handleSingleDelete(product.id)}
+          >
+            Remove
+          </Button>
+        </IndexTable.Cell>
+      </IndexTable.Row>
+    );
+  });
 
   return (
     <Page
@@ -402,6 +435,7 @@ export default function ProductsPage() {
                 { title: "Image" },
                 { title: "Product Title" },
                 { title: "Price", alignment: "end" },
+                { title: "Recommendations", alignment: "end" },
                 { title: "Actions", alignment: "end" },
               ]}
             >

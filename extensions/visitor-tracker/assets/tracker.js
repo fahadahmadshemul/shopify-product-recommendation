@@ -8,6 +8,19 @@
     return localStorage.getItem("vt_consent_withdrawn") !== "1";
   }
 
+  // --- Visitor Token Management (HMAC-signed server-issued token) ---
+  // The server signs the visitorId on every /api/track response.
+  // We store this token and send it back on /api/gdpr requests so the server
+  // can verify the caller genuinely owns this visitorId.
+  // httpOnly cookies are NOT used — see visitor-token.server.js for the rationale.
+  function getVisitorToken() {
+    return localStorage.getItem("vt_visitor_token");
+  }
+
+  function setVisitorToken(token) {
+    if (token) localStorage.setItem("vt_visitor_token", token);
+  }
+
   function setConsent(granted) {
     if (granted) {
       localStorage.removeItem("vt_consent_withdrawn");
@@ -15,12 +28,18 @@
       localStorage.setItem("vt_consent_withdrawn", "1");
       // Purge server-side data on opt-out
       var oldId = getVisitorId(false);
+      var token = getVisitorToken();
       if (oldId) {
-        fetch(APP_URL + "/api/gdpr?visitorId=" + encodeURIComponent(oldId) + "&shop=" + encodeURIComponent(shopDomain), {
-          method: "DELETE",
-        }).catch(function () { });
+        // Include visitorToken so the server can verify we own this visitorId.
+        // FALLBACK: If no token yet (e.g. first page load with immediate opt-out),
+        // the DELETE will return 401. This is acceptable — no data was tracked yet.
+        var gdprUrl = APP_URL + "/api/gdpr?visitorId=" + encodeURIComponent(oldId) +
+          "&shop=" + encodeURIComponent(shopDomain) +
+          (token ? "&visitorToken=" + encodeURIComponent(token) : "");
+        fetch(gdprUrl, { method: "DELETE" }).catch(function () { });
       }
       localStorage.removeItem("vt_visitor_id");
+      localStorage.removeItem("vt_visitor_token");
     }
   }
 
@@ -88,9 +107,18 @@
 
   // 2. Event tracking helper
   function track(eventType, productId, duration = null, price = null) {
+    var customerId = (window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.page && window.ShopifyAnalytics.meta.page.customerId) ||
+                     (window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.customerId) ||
+                     (window.__st && window.__st.cid) ||
+                     null;
+
     fetch(`${APP_URL}/api/track`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // Note: credentials: 'include' is intentionally NOT set here.
+      // This is a cross-domain App Proxy request and third-party cookies are blocked
+      // in Safari/Chrome. Instead we use the HMAC-signed visitorToken returned in the
+      // response body and stored in localStorage for authorization.
       body: JSON.stringify({
         visitorId,
         shopDomain,
@@ -98,8 +126,17 @@
         eventType,
         duration,
         price,
+        customerId: customerId ? String(customerId) : null,
       }),
-    }).catch((err) => console.error("Track failed:", err));
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      // Store the server-issued signed token so we can authorize future /api/gdpr requests.
+      if (data && data.visitorToken) {
+        setVisitorToken(data.visitorToken);
+      }
+    })
+    .catch((err) => console.error("Track failed:", err));
   }
 
   // 3. Detect product page — purchase tracking is handled via orders/create webhook

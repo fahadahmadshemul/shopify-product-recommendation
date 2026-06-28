@@ -1,11 +1,37 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { verifyVisitorToken } from "../utils/visitor-token.server.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
+
+/**
+ * Validate a request's visitorId against its visitorToken.
+ *
+ * The token is an HMAC-SHA256 signature of the visitorId, signed with SHOPIFY_API_SECRET.
+ * Clients obtain it from the /api/track response and store it in localStorage.
+ *
+ * FALLBACK: If no token is provided (e.g. legacy request or cookie-not-present scenario),
+ * we reject with 401 so the caller knows they need to call /api/track first to get a token.
+ *
+ * Legitimate browser flows (tracker.js GDPR opt-out) always have the token available
+ * because a track() call is always made before the opt-out DELETE is triggered.
+ */
+function validateToken(visitorId, visitorToken) {
+  if (!visitorToken) {
+    return {
+      valid: false,
+      error: "Missing visitorToken. Call /api/track first to obtain a signed token.",
+    };
+  }
+  if (!verifyVisitorToken(visitorId, visitorToken)) {
+    return { valid: false, error: "Invalid visitorToken — unauthorized." };
+  }
+  return { valid: true };
+}
 
 export const loader = async ({ request }) => {
   if (request.method === "OPTIONS") {
@@ -16,6 +42,7 @@ export const loader = async ({ request }) => {
     const { session } = await authenticate.public.appProxy(request);
     const url = new URL(request.url);
     const visitorId = url.searchParams.get("visitorId");
+    const visitorToken = url.searchParams.get("visitorToken");
     const shopDomain = session ? session.shop : url.searchParams.get("shop");
 
     if (!shopDomain || !visitorId) {
@@ -25,13 +52,21 @@ export const loader = async ({ request }) => {
       );
     }
 
-    const activities = await db.visitorActivity.findMany({
-      where: { shopDomain, visitorId },
-    });
+    // Verify that the caller owns this visitorId via a signed token.
+    // Without this check, any client knowing or guessing a visitorId string
+    // could read another visitor's full activity history.
+    const tokenCheck = validateToken(visitorId, visitorToken);
+    if (!tokenCheck.valid) {
+      return Response.json(
+        { error: tokenCheck.error },
+        { status: 401, headers: corsHeaders }
+      );
+    }
 
-    const recommendations = await db.recommendation.findMany({
-      where: { shopDomain, visitorId },
-    });
+    const [activities, recommendations] = await Promise.all([
+      db.visitorActivity.findMany({ where: { shopDomain, visitorId } }),
+      db.recommendation.findMany({ where: { shopDomain, visitorId } }),
+    ]);
 
     return Response.json(
       {
@@ -62,6 +97,7 @@ export const action = async ({ request }) => {
       const { session } = await authenticate.public.appProxy(request);
       const url = new URL(request.url);
       const visitorId = url.searchParams.get("visitorId");
+      const visitorToken = url.searchParams.get("visitorToken");
       const shopDomain = session ? session.shop : url.searchParams.get("shop");
 
       if (!shopDomain || !visitorId) {
@@ -71,13 +107,21 @@ export const action = async ({ request }) => {
         );
       }
 
-      const deletedActivities = await db.visitorActivity.deleteMany({
-        where: { shopDomain, visitorId },
-      });
+      // Verify token before allowing any data deletion.
+      // Without this check, anyone knowing a visitorId (predictable format) could
+      // permanently erase another visitor's recommendation history.
+      const tokenCheck = validateToken(visitorId, visitorToken);
+      if (!tokenCheck.valid) {
+        return Response.json(
+          { error: tokenCheck.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
 
-      const deletedRecommendations = await db.recommendation.deleteMany({
-        where: { shopDomain, visitorId },
-      });
+      const [deletedActivities, deletedRecommendations] = await Promise.all([
+        db.visitorActivity.deleteMany({ where: { shopDomain, visitorId } }),
+        db.recommendation.deleteMany({ where: { shopDomain, visitorId } }),
+      ]);
 
       console.log(
         `Manual GDPR deletion for visitor ${visitorId}: ` +

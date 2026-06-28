@@ -1,29 +1,14 @@
 import db from "../db.server";
-import { BILLING_PLANS, BILLING_PLAN_KEYS } from "./billing.service";
+import { resolveActivePlan } from "./billing.service";
 
-export async function getActivePlanKey(shopDomain) {
-  const shop = await db.shop.findUnique({
-    where: { shop: shopDomain },
-    include: {
-      subscriptions: {
-        where: { status: "ACTIVE" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
-  });
-
-  if (shop && shop.subscriptions.length > 0) {
-    const planKey = shop.subscriptions[0].planKey;
-    if (BILLING_PLANS[planKey]) return planKey;
-  }
-
-  return BILLING_PLAN_KEYS.FREE;
+export async function getActivePlanKey(shopDomain, billing = null) {
+  const { planKey } = await resolveActivePlan(shopDomain, billing);
+  return planKey;
 }
 
-export async function getActivePlan(shopDomain) {
-  const planKey = await getActivePlanKey(shopDomain);
-  return BILLING_PLANS[planKey] || BILLING_PLANS[BILLING_PLAN_KEYS.FREE];
+export async function getActivePlan(shopDomain, billing = null) {
+  const { plan } = await resolveActivePlan(shopDomain, billing);
+  return plan;
 }
 
 export async function getMonthlyRecommendationCount(shopDomain) {

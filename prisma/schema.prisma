@@ -38,7 +38,7 @@ model Shop {
   id             Int                   @id @default(autoincrement())
   shop           String                @unique
   subscriptions  BillingSubscription[]
-  accessToken    String
+  accessToken    String?
   scope          String
   isActive       Boolean               @default(true)
   currency       String                @default("USD")
@@ -50,23 +50,30 @@ model Shop {
 // Phase 1 — Products cache table
 
 model Product {
-  id              String   @id
-  title           String
-  handle          String?
-  price           Float
-  compareAtPrice  Float?
-  imageUrl        String?
-  firstVariantId  String?
-  shopDomain      String
-  createdAt       DateTime @default(now())
+  id               String   @id
+  title            String
+  handle           String?
+  price            Float
+  compareAtPrice   Float?
+  imageUrl         String?
+  firstVariantId   String?
+  shopDomain       String
+  // Availability fields — null means "not yet synced"; treated as available/ACTIVE for backward compat
+  totalInventory   Int?     // Shopify total inventory across all locations
+  status           String?  // "ACTIVE" | "DRAFT" | "ARCHIVED"
+  // Merchant exclude-list flag — defaults false so no existing product is silently excluded
+  excludedFromRecs Boolean  @default(false)
+  createdAt        DateTime @default(now())
 
   @@index([shopDomain])
+  @@index([shopDomain, excludedFromRecs])
 }
 
 // Phase 2+3 — Visitor activity
 model VisitorActivity {
   id         Int      @id @default(autoincrement())
   visitorId  String // customer's unique ID
+  customerId String? // Shopify customer ID (linked when logged in)
   shopDomain String
   productId  String
   eventType  String // "view", "cart", "purchase"
@@ -76,6 +83,7 @@ model VisitorActivity {
 
   @@index([shopDomain, productId])
   @@index([shopDomain, visitorId])
+  @@index([shopDomain, customerId])
 }
 
 // Phase 4 — Recommendations
